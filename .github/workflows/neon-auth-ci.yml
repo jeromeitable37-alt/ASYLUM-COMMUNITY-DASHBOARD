@@ -25,5 +25,9 @@ jobs:
         run: npx tsc --noEmit
       - name: Typecheck serverless APIs
         run: npx tsc --project tsconfig.api.json
+      - name: Smoke test compiled API imports under Node ESM
+        run: |
+          npx tsc --project tsconfig.api.json --noEmit false --outDir .api-smoke --rootDir api
+          node --input-type=module -e "await Promise.all(['dashboard','showcase','photo-upload'].map(name => import('./.api-smoke/'+name+'.js')))"
       - name: Bundle React application
         run: npm run build
