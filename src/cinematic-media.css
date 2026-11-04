@@ -55,3 +55,9 @@
 @media(max-width:1080px){.asy-cinema-layout{grid-template-columns:minmax(0,1fr)}.asy-cinema-playlist{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.asy-cinema-playlist-header,.asy-cinema-disclaimer{grid-column:1/-1}.asy-cinema-video-choice{grid-template-columns:1fr;gap:9px}.asy-cinema-thumb{width:100%}.asy-cinema-choice-arrow{display:none}}
 @media(max-width:640px){.asy-cinema{padding:65px 5.5%}.asy-cinema-intro{align-items:flex-start;flex-direction:column}.asy-cinema-broadcast{padding:10px 12px}.asy-cinema-intro h2{font-size:43px}.asy-cinema-playlist{display:flex;flex-direction:column}.asy-cinema-playlist-header{width:100%}.asy-cinema-video-choice{grid-template-columns:96px minmax(0,1fr) 15px}.asy-cinema-thumb{width:96px}.asy-cinema-choice-arrow{display:block}.asy-cinema-stage-details{grid-template-columns:34px 1fr 30px;padding:15px;gap:11px}.asy-cinema-video-symbol{width:34px;height:34px}.asy-cinema-stage-details h3{font-size:20px}.asy-cinema-play{width:65px;height:65px}.asy-cinema-cover-prompt{font-size:8px;bottom:13px}.asy-cinema-disclaimer{width:100%}}
 @media(prefers-reduced-motion:reduce){.asy-cinema-led{animation:none}.asy-cinema-cover img,.asy-cinema-play,.asy-cinema-video-choice{transition:none}.asy-cinema-cover:hover img{transform:none}.asy-cinema-cover:hover .asy-cinema-play{scale:1}}
+
+/* Keep the YouTube video thumbnail unaltered and the player large enough on phones. */
+.asy-cinema-cover img{filter:none;transition:none;object-fit:contain;background:#0a090b}
+.asy-cinema-cover:hover img,.asy-cinema-cover:focus-visible img{transform:none;filter:none}
+.asy-cinema-thumb img{object-fit:contain;background:#08070a}
+@media(max-width:640px){.asy-cinema-screen{min-height:200px}}
