@@ -26,7 +26,7 @@ type Team = {
   captain_member_id: string | null; members: TeamPerson[];
 };
 type Manager = {
-  user_id: string; role: string; display_name: string; title: string; bio: string;
+  user_id: string; role: string; display_name: string; ign?: string | null; title: string; bio: string;
   photo_url: string | null; show_public?: boolean;
 };
 type Achievement = {
@@ -264,7 +264,7 @@ export default function CommunityShowcase({ members, isAdmin, currentRole, curre
       <div className="asy-management-showcase-grid">{content.management.map((person, index) => <article className="asy-leader-card" key={person.user_id}>
         <div className="asy-leader-photo">{person.photo_url ? <img src={person.photo_url} alt={person.display_name} loading="lazy" /> : <Initials name={person.display_name} />}<div className="asy-leader-overlay" /></div>
         <div className="asy-leader-id">ASY / STAFF / {String(index + 1).padStart(2, '0')}</div>
-        <div className="asy-leader-info"><span><BadgeCheck size={15} /> {person.title || person.role}</span><h3>{person.display_name}</h3><p>{person.bio || 'Helping build a stronger, more connected ASYLUM Community.'}</p><div className="asy-leader-foot">OFFICIAL {person.role.toUpperCase()} <Shield size={16} /></div></div>
+        <div className="asy-leader-info"><span><BadgeCheck size={15} /> {person.title || person.role}</span><h3>{person.display_name}</h3><div className="asy-leader-ign">IGN: {person.ign || 'Not provided'}</div><p>{person.bio || 'Helping build a stronger, more connected ASYLUM Community.'}</p><div className="asy-leader-foot">OFFICIAL {person.role.toUpperCase()} <Shield size={16} /></div></div>
       </article>)}
         {!loading && content.management.length === 0 && <div className="asy-showcase-empty"><Crown size={34} /><h3>Management profiles coming soon.</h3><p>Once management publishes their profiles, they’ll appear here.</p></div>}
       </div>
