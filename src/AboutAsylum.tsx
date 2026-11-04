@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowRight, CalendarDays, CheckCircle2, Compass, Crown, Edit3, Flag, Save, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { portalAuth } from './lib/portal-auth';
+import { readApiEnvelope } from './lib/read-api';
 import './portal-upgrade.css';
 
 type About = {
@@ -29,7 +30,7 @@ export default function AboutAsylum({ isAdmin }: {isAdmin: boolean}) {
   const [notice, setNotice] = useState('');
   useEffect(() => {
     let active = true;
-    fetch('/api/showcase?action=public').then(r=>r.ok?r.json():Promise.reject(new Error('Could not load About ASYLUM.')))
+    fetch('/api/showcase?action=public').then(r => readApiEnvelope<{about?: About}>(r))
       .then(response => { if (active && response?.data?.about) {setAbout(response.data.about);setDraft(response.data.about);} })
       .catch(()=>{});
     return () => {active=false;};
@@ -40,8 +41,7 @@ export default function AboutAsylum({ isAdmin }: {isAdmin: boolean}) {
       const { data: {session} }=await portalAuth.getSession();
       if(!session)throw new Error('Sign in as management first.');
       const r=await fetch('/api/showcase?action=about_save',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify(draft)});
-      const response=await r.json();
-      if(!r.ok)throw new Error(response.error || 'Could not save About ASYLUM.');
+      const response=await readApiEnvelope<About>(r,'Unable to save About ASYLUM right now.');
       setAbout(response.data);setDraft(response.data);setEditing(false);setNotice('About ASYLUM updated.');
     }catch(e){setNotice(e instanceof Error?e.message:'Could not save about information.');}
     finally{setSaving(false);}
