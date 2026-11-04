@@ -9,6 +9,7 @@ import { supabase } from './lib/supabase';
 import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
+import './auth-cyber.css';
 
 type Member = { id: string; user_id?: string | null; display_name: string; ign: string | null; uid: string | null; streamer_mode_id: string | null; team: string | null; role: string; photo_url: string | null };
 type Application = { id: string; display_name: string; ign: string; uid: string; streamer_mode_id: string | null; photo_url: string | null; status: 'pending' | 'approved' | 'rejected'; review_note: string | null; created_at: string };
