@@ -1,0 +1,26 @@
+name: Neon Auth cutover checks
+on:
+  push:
+    branches:
+      - neon-auth-cutover-ready
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck client
+        run: npx tsc --noEmit
+      - name: Bundle React application
+        run: npm run build
