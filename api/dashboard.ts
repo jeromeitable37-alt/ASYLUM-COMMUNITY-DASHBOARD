@@ -98,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sql`SELECT * FROM member_applications WHERE id = ${userId}::uuid LIMIT 1`,
         sql`SELECT user_id, role, photo_url FROM community_admins WHERE user_id = ${userId}::uuid LIMIT 1`,
       ]);
-      return res.json({ data: { application: app[0] || null, admin: admin[0] || null } });
+      return res.json({ data: { dashboard_user_id: userId, application: app[0] || null, admin: admin[0] || null } });
     }
     if (req.method === 'GET' && action === 'queue') {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
