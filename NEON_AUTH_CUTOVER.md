@@ -61,7 +61,8 @@ Run a `SELECT` first and confirm exactly one staff record and matching Neon user
 ## Readiness status
 
 - **Prepared:** isolated Neon services, branches, public storage buckets, cutover API code, client code, and SQL identity mapping. Existing official data not deleted.
-- **Not verified:** Neon OTP delivery/settings, SDK integration in a live browser, CI/build status, server JWT verification with a real session, object upload CORS, and actual legacy Owner login.
+- **CI verified:** client TypeScript, serverless API TypeScript, and Vite production bundle all passed in GitHub Actions on 2026-11-04 (run 41838747069).
+- **Not verified:** Neon OTP delivery/settings, SDK integration in a live browser, server JWT verification with a real session, object upload CORS, and actual legacy Owner login.
 - **Blocked:** preview Vercel environment authorization and earlier Hobby build-rate limits.
 - **Not safe yet:** production cutover, bulk registration or assuming old Supabase passwords still work.
 
