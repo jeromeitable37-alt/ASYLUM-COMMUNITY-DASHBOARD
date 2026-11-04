@@ -56,6 +56,8 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
+  const [resendBusy, setResendBusy] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [ign, setIgn] = useState('');
   const [uid, setUid] = useState('');
@@ -168,7 +170,12 @@ function App() {
         if (error) throw error;
         if (data.session) await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
         if (data.session && data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
-        if (data.session) setShowAuth(false);
+        if (data.session) {
+          setShowAuth(false);
+          setConfirmationEmail(null);
+        } else {
+          setConfirmationEmail(email.trim());
+        }
         setNotice({ kind: 'success', text: data.session
           ? 'Registration submitted! Your application is waiting for management approval.'
           : 'Check your email to confirm your account, then sign in to finish your profile photo upload. Your application will appear after you confirm your email and sign in.' });
@@ -176,6 +183,7 @@ function App() {
         const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
         if (!data.session?.access_token) throw new Error('Authentication succeeded, but no login session was returned.');
+        setConfirmationEmail(null);
         setShowAuth(false);
         setPassword('');
         try {
@@ -194,6 +202,24 @@ function App() {
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Something went wrong. Please try again.' });
     } finally { setBusy(false); }
+  };
+
+  const resendConfirmation = async () => {
+    if (!confirmationEmail || resendBusy) return;
+    setResendBusy(true);
+    setNotice(null);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: confirmationEmail.trim(),
+      });
+      if (error) throw error;
+      setNotice({ kind: 'success', text: 'Confirmation email requested. Please check Inbox, Spam, or Promotions. Once verified, sign in here to submit your application.' });
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to resend confirmation email. Try again later.' });
+    } finally {
+      setResendBusy(false);
+    }
   };
 
   // Staff can complete Streamer Mode details for already-registered members.
@@ -444,6 +470,15 @@ function App() {
                 <div className="auth-overline"><Sparkles size={13} /> SECURE ASYLUM ACCESS / 2026</div>
                 <div className="account-card-heading"><span className="account-icon">{authMode === 'signup' ? <UserPlus /> : <LogIn />}</span><div><h3>{authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
                 <div className="auth-switch"><button className={authMode === 'signup' ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setNotice(null); }}>Register</button><button className={authMode === 'signin' ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setNotice(null); }}>Sign in</button></div>
+                {authMode === 'signup' && confirmationEmail && <div className="asy-confirm-email" role="status">
+                  <div className="asy-confirm-title"><CheckCircle2 size={18} /> Verify your email before management review</div>
+                  <p>We received your signup for <strong>{confirmationEmail}</strong>. Your application will be added after you confirm your email and sign in.</p>
+                  <p>Check your Inbox, Spam, or Promotions for a Supabase confirmation message. <strong>Don't register again.</strong></p>
+                  <div className="asy-confirm-actions">
+                    <button type="button" disabled={resendBusy} onClick={() => void resendConfirmation()}>{resendBusy ? 'Sending…' : 'Resend confirmation email'}</button>
+                    <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>I've confirmed — Sign in</button>
+                  </div>
+                </div>}
                 <form className="member-form" onSubmit={submitAuth}>
                   {authMode === 'signup' && <>
                     <label htmlFor="display-name">FULL NAME</label><input id="display-name" required minLength={2} maxLength={60} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
