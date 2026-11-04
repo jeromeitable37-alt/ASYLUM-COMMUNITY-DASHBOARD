@@ -40,6 +40,7 @@ async function dashboard<T>(action: string, opts?: { body?: Record<string, unkno
 
 function App() {
   const [session, setSession] = useState<PortalSession | null>(null);
+  const [dashboardUserId, setDashboardUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('Members');
   const [query, setQuery] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -89,7 +90,7 @@ function App() {
         const directory = await dashboard<Member[]>('directory');
         if (active) setMembers(directory ?? []);
         if (!session?.user) {
-          if (active) { setIsAdmin(false); setCurrentRole(null); setAdminAccounts([]); setApplication(null); setApplications([]); }
+          if (active) { setIsAdmin(false); setCurrentRole(null); setAdminAccounts([]); setApplication(null); setApplications([]); setDashboardUserId(null); }
           return;
         }
         const draft = readPendingRegistration();
@@ -104,8 +105,9 @@ function App() {
             if (!(error instanceof Error) || !/verify your Neon|verified email|needs an Owner-approved/i.test(error.message)) throw error;
           }
         }
-        const profile = await dashboard<{ application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
+        const profile = await dashboard<{dashboard_user_id:string, application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
         if (!active) return;
+        setDashboardUserId(profile.dashboard_user_id);
         const role = profile.admin?.role ?? null;
         setCurrentRole(role);
         setManagementPhotoUrl(profile.admin?.photo_url ?? null);
@@ -155,7 +157,7 @@ function App() {
       const publicUrl = await uploadPortalImage(file, 'self');
       await dashboard('photo', { body: { kind: 'self', photo_url: publicUrl } });
       setApplication(current => current ? { ...current, photo_url: publicUrl } : current);
-      setMembers(current => current.map(member => member.user_id === session.user.id ? { ...member, photo_url: publicUrl } : member));
+      setMembers(current => current.map(member => member.user_id === dashboardUserId ? { ...member, photo_url: publicUrl } : member));
       setNotice({ kind: 'success', text: 'Your profile picture has been updated.' });
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save your picture.' }); }
     finally { setBusy(false); }
@@ -294,7 +296,7 @@ function App() {
     try {
       const updated = await dashboard<Application>('set_my_streamer_id', { body: { streamer_mode_id: value } });
       setApplication(updated);
-      setMembers(current => current.map(member => member.user_id === session?.user.id
+      setMembers(current => current.map(member => member.user_id === dashboardUserId
         ? { ...member, streamer_mode_id: value } : member));
       setMyStreamerDraft('');
       setNotice({ kind: 'success', text: updated.status === 'pending'
@@ -382,7 +384,7 @@ function App() {
     finally { setBusy(false); }
   };
 
-  const signOut = async () => { await portalAuth.signOut(); setSession(null); setNotice({ kind: 'info', text: 'You have signed out of Neon Auth.' }); setShowAuth(false); };
+  const signOut = async () => { await portalAuth.signOut(); setSession(null); setDashboardUserId(null); setNotice({ kind: 'info', text: 'You have signed out of Neon Auth.' }); setShowAuth(false); };
 
   return (
     <div className="site-shell">
@@ -534,7 +536,7 @@ function App() {
           members={members}
           isAdmin={isAdmin}
           currentRole={currentRole}
-          currentUserId={session?.user.id ?? null}
+          currentUserId={dashboardUserId}
           onMemberUpdated={updated => setMembers(current => current.map(item => item.id === updated.id ? { ...item, ...updated } : item))}
         />
 
@@ -632,7 +634,7 @@ function App() {
           </div>
           <div className="admin-records"><h3>Recent applications</h3>{applications.slice(0, 8).map(item => <div className="admin-record" key={item.id}><span>{item.ign} <small>· {item.uid}</small></span><span className={'status-text ' + item.status}>{item.status}</span></div>)}</div>
           {currentRole === 'owner' && <div className="owner-tools">
-            <UserManagement currentUserId={session?.user.id || null} onRoleUpdated={() => { void dashboard<AdminAccount[]>('admins').then(setAdminAccounts).catch(() => {}); }} />
+            <UserManagement currentUserId={dashboardUserId} onRoleUpdated={() => { void dashboard<AdminAccount[]>('admins').then(setAdminAccounts).catch(() => {}); }} />
             <form className="owner-form transfer-form" onSubmit={transferOwnership}><label htmlFor="transfer-email">TRANSFER COMMUNITY OWNERSHIP</label><p>The new Owner must already have a registered account. Your account will automatically become a Management Admin after transfer.</p><input id="transfer-email" type="email" required value={transferEmail} onChange={e => setTransferEmail(e.target.value)} placeholder="newowner@example.com" /><button className="transfer-button" type="submit" disabled={busy}>Transfer ownership <Crown size={16} /></button></form>
           </div>}
         </section>}
