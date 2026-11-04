@@ -219,6 +219,10 @@ function App() {
               streamer_mode_id:draft.streamer_mode_id,
             }});
             clearPendingRegistration();
+            if (photoFile) {
+              await uploadPhoto(current.user.id, photoFile);
+              setPhotoFile(null);
+            }
           } catch (profileError) {
             if (profileError instanceof Error && /verify your Neon Auth email/i.test(profileError.message)) {
               setConfirmationEmail(normalizedEmail);
