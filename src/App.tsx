@@ -653,9 +653,9 @@ function App() {
               <div className="auth-mood-particles" aria-hidden="true"><span /><span /><span /><span /><span /></div>
               {!session || showAuth ? <>
                 <div className="auth-overline"><Sparkles size={13} /> SECURE ASYLUM ACCESS / 2026</div>
-                <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
-                <div className="auth-switch"><button type="button" className={authMode === 'signup' ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setNotice(null); }}>Register</button><button type="button" className={authMode === 'signin' ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setNotice(null); }}>Sign in</button></div>
-                {confirmationEmail && <div className="asy-confirm-email" role="status">
+                <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{recoveryMode ? 'Recover your Neon account.' : authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{recoveryMode ? 'Reset your password using a code delivered to your registered email.' : authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
+                <div className="auth-switch"><button type="button" className={authMode === 'signup' && !recoveryMode ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setRecoveryMode(null); setNotice(null); }}>Register</button><button type="button" className={authMode === 'signin' && !recoveryMode ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setRecoveryMode(null); setNotice(null); }}>Sign in</button></div>
+                {!recoveryMode && confirmationEmail && <div className="asy-confirm-email" role="status">
                   <div className="asy-confirm-title"><CheckCircle2 size={18} /> Neon Auth — verify your email</div>
                   <p>Check the email sent to <strong>{confirmationEmail}</strong> for your one-time verification code. Your membership is <strong>not</strong> submitted until your email is verified and your profile is completed.</p>
                   <form onSubmit={confirmVerification} className="asy-neon-otp-form">
@@ -672,7 +672,7 @@ function App() {
                     <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Already verified? Sign in</button>
                   </div>
                 </div>}
-                <form className="member-form" onSubmit={submitAuth}>
+                {!recoveryMode && <form className="member-form" onSubmit={submitAuth}>
                   {authMode === 'signup' && <>
                     <label htmlFor="display-name">FULL NAME</label><input id="display-name" required minLength={2} maxLength={60} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
                     <label htmlFor="ign">IN-GAME NAME (IGN)</label><input id="ign" required minLength={2} maxLength={40} value={ign} onChange={e => setIgn(e.target.value)} placeholder="Your exact IGN" />
@@ -687,7 +687,33 @@ function App() {
                   </div>
                   {notice?.kind === 'error' && <div className="auth-error-inline" role="alert"><X size={14} /> {notice.text}</div>}
                   <button className="button-primary form-submit auth-neon-submit" type="submit" disabled={busy}>{busy ? 'Securing your session…' : authMode === 'signup' ? 'Create ASYLUM profile' : 'Access community'} <ArrowUpRight size={17} /></button>
-                </form><p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
+                </form>}
+                {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Forgot your password?</button>}
+                {recoveryMode && <div className="asy-recovery-panel">
+                  {recoveryMode === 'request'
+                    ? <form className="asy-recovery-form" onSubmit={requestPasswordResetCode}>
+                        <h4><LockKeyhole size={19}/> Reset your password</h4>
+                        <p>Enter the email of your Neon Auth account. Only the owner of that email can use the verification code. This does not reset old Supabase passwords.</p>
+                        <label htmlFor="recovery-email">REGISTERED EMAIL</label>
+                        <input id="recovery-email" type="email" autoComplete="email" required maxLength={256} value={recoveryEmail} onChange={event => setRecoveryEmail(event.target.value)} placeholder="you@example.com"/>
+                        <button type="submit" className="button-primary form-submit" disabled={recoveryBusy}>{recoveryBusy ? 'Requesting code…' : 'Send password reset code'} <ArrowRight size={17}/></button>
+                      </form>
+                    : <form className="asy-recovery-form" onSubmit={finishPasswordRecovery}>
+                        <h4><ShieldCheck size={19}/> Verify and set a new password</h4>
+                        <p>Enter the code sent to <strong>{recoveryEmail}</strong>. Your Admin/Member role and IGN will not change.</p>
+                        <label htmlFor="recovery-code">EMAIL RESET CODE</label>
+                        <input id="recovery-code" type="text" inputMode="numeric" pattern="[0-9]{6,8}" minLength={6} maxLength={8} required autoComplete="one-time-code" value={recoveryCode} onChange={event=>setRecoveryCode(event.target.value.replace(/[^0-9]/g,''))} placeholder="6-digit code"/>
+                        <label htmlFor="recovery-new">NEW PASSWORD</label>
+                        <input id="recovery-new" type="password" required minLength={8} autoComplete="new-password" value={recoveryPassword} onChange={event=>setRecoveryPassword(event.target.value)} placeholder="At least 8 characters"/>
+                        <label htmlFor="recovery-confirm">CONFIRM NEW PASSWORD</label>
+                        <input id="recovery-confirm" type="password" required minLength={8} autoComplete="new-password" value={recoveryConfirm} onChange={event=>setRecoveryConfirm(event.target.value)} placeholder="Enter password again"/>
+                        <button type="submit" className="button-primary form-submit" disabled={recoveryBusy}>{recoveryBusy ? 'Updating password…' : 'Reset my password'} <ShieldCheck size={17}/></button>
+                        <button type="button" className="asy-recovery-link" onClick={()=> { setRecoveryMode('request'); setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm(''); setNotice(null); }}>Request a new code or change email</button>
+                      </form>}
+                  {notice && <p className={notice.kind === 'error' ? 'asy-recovery-error' : 'asy-recovery-info'} role="status">{notice.text}</p>}
+                  <button type="button" className="asy-recovery-back" onClick={() => { setRecoveryMode(null);setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm('');setAuthMode('signin');setNotice(null); }}>Back to Sign in</button>
+                </div>}
+                <p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
               </> : <div className="signed-in-panel">
                 <span className="account-icon"><CheckCircle2 /></span><h3>You’re signed in</h3><p>{session.user.email}</p>
                 {!application && <form className="asy-complete-streamer-form" onSubmit={completeApplication}>
@@ -720,6 +746,20 @@ function App() {
                 </form>}
                 {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : <><p>No member application is linked to this account yet. If you signed up before registration was enabled, contact management.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></>}
 
+                {session && <div className="asy-password-security">
+                  <button className="asy-recovery-link" type="button" onClick={() => {setSecurityOpen(v=>!v);setNotice(null);}} aria-expanded={securityOpen}><LockKeyhole size={16}/> {securityOpen ? 'Close password settings' : 'Change my password'}</button>
+                  {securityOpen && <form className="asy-recovery-form" onSubmit={updateMyPassword}>
+                    <h4>Update Neon Auth password</h4>
+                    <p>For security, enter your current password. Other signed-in sessions will be revoked.</p>
+                    <label htmlFor="security-old">CURRENT PASSWORD</label>
+                    <input id="security-old" type="password" required autoComplete="current-password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)}/>
+                    <label htmlFor="security-new">NEW PASSWORD</label>
+                    <input id="security-new" type="password" minLength={8} required autoComplete="new-password" value={securityNewPassword} onChange={e=>setSecurityNewPassword(e.target.value)}/>
+                    <label htmlFor="security-confirm">CONFIRM NEW PASSWORD</label>
+                    <input id="security-confirm" type="password" minLength={8} required autoComplete="new-password" value={securityConfirm} onChange={e=>setSecurityConfirm(e.target.value)}/>
+                    <button className="button-primary form-submit" type="submit" disabled={securityBusy}>{securityBusy ? 'Updating…' : 'Change password'} <ShieldCheck size={16}/></button>
+                  </form>}
+                </div>}
                 {session && <p className="asy-neon-privacy-note">Neon Auth manages account security for this Dashboard. Recruitment and Jersey accounts are separate.</p>}
                 <button className="button-primary form-submit" onClick={() => void signOut()}>Sign out <ArrowUpRight size={17} /></button>{isAdmin && <button className="button-quiet" onClick={() => scrollTo('admin-panel')}>Open management panel</button>}
               </div>}
