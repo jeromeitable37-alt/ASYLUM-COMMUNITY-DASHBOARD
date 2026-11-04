@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS member_applications (
   display_name text NOT NULL CHECK (char_length(trim(display_name)) BETWEEN 2 AND 60),
   ign text NOT NULL CHECK (char_length(trim(ign)) BETWEEN 2 AND 40),
   uid text NOT NULL CHECK (char_length(trim(uid)) BETWEEN 3 AND 40),
+  streamer_mode_id text CHECK (streamer_mode_id IS NULL OR char_length(streamer_mode_id) <= 100),
   photo_url text,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
   review_note text,
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS members (
   display_name text NOT NULL,
   ign text,
   uid text,
+  streamer_mode_id text CHECK (streamer_mode_id IS NULL OR char_length(streamer_mode_id) <= 100),
   team text,
   role text NOT NULL DEFAULT 'Member',
   photo_url text,
@@ -39,3 +41,7 @@ CREATE TABLE IF NOT EXISTS community_admins (
 CREATE INDEX IF NOT EXISTS idx_member_applications_status ON member_applications(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_members_created_at ON members(created_at DESC);
 -- All connections are server-only using DATABASE_URL. Never expose a Neon SQL URL to the browser.
+
+-- Safe upgrade for databases created before Streamer Mode ID was added.
+ALTER TABLE members ADD COLUMN IF NOT EXISTS streamer_mode_id text;
+ALTER TABLE member_applications ADD COLUMN IF NOT EXISTS streamer_mode_id text;
