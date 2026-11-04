@@ -217,8 +217,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST' && action === 'transfer') {
       if (!owner) return res.status(403).json({ error: 'Owner access required.' });
       const email = safeName(payload.email, 254).toLowerCase();
-      const target = await sql`SELECT user_id FROM identities WHERE lower(email)=${email} LIMIT 1`;
+      const target = await sql`SELECT user_id,portal_status FROM identities WHERE lower(email)=${email} LIMIT 1`;
       if (!target.length) return res.status(404).json({ error: 'Target account must sign in first.' });
+      if (target[0].portal_status !== 'active') return res.status(409).json({ error: 'Restore the target account before transferring ownership.' });
       if (target[0].user_id === userId) return res.status(400).json({ error: 'Already the owner.' });
       // Atomic transaction in one statement to maintain a single owner.
       const updates = await sql`WITH downgrade AS (UPDATE community_admins SET role='management' WHERE user_id=${userId}::uuid AND role='owner' RETURNING user_id), upgrade AS (INSERT INTO community_admins (user_id,role) SELECT ${target[0].user_id}::uuid,'owner' FROM downgrade ON CONFLICT (user_id) DO UPDATE SET role='owner' RETURNING user_id) SELECT (SELECT count(*) FROM upgrade)::int AS changed`;
