@@ -189,9 +189,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'POST' && action === 'set_streamer_id') {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
       if (!isUuid(payload.member_id)) return res.status(400).json({ error: 'Invalid member.' });
-      if (typeof payload.streamer_mode_id !== 'string' || payload.streamer_mode_id.length > 100)
-        return res.status(400).json({ error: 'Streamer Mode ID must be 100 characters or fewer.' });
-      const streamerId = payload.streamer_mode_id.trim() || null;
+      if (typeof payload.streamer_mode_id !== 'string' || !payload.streamer_mode_id.trim() || payload.streamer_mode_id.trim().length > 100)
+        return res.status(400).json({ error: 'Streamer Mode ID is required (maximum 100 characters).' });
+      const streamerId = payload.streamer_mode_id.trim();
       // Keep roster and the linked application consistent in one Postgres statement.
       const rows = await sql`WITH updated_member AS (
         UPDATE members SET streamer_mode_id=${streamerId}, updated_at=now()
