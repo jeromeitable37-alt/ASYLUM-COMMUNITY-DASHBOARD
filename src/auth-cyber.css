@@ -90,3 +90,62 @@
 .asy-complete-streamer-form input::placeholder {color:#947b85}
 .asy-complete-streamer-form button {width:100%;justify-content:center;display:flex;align-items:center;gap:9px}
 @media(max-width:540px){.asy-complete-streamer-form{padding:14px}}
+
+
+/* ASYLUM registration icon: uploaded official artwork, replaces generic user glyph. */
+.cyber-account-card .account-card-heading .account-icon.account-logo-box {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 66px;
+  height: 66px;
+  flex: 0 0 66px;
+  padding: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 99, 118, .75);
+  border-radius: 16px;
+  background: linear-gradient(145deg, #40121f, #130d12 68%);
+  box-shadow: 0 0 18px rgba(238, 38, 70, .24), inset 0 0 14px rgba(255, 55, 82, .12);
+  transition: box-shadow .25s ease, transform .25s ease;
+}
+.cyber-account-card .account-card-heading .account-logo-box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14);
+}
+.cyber-account-card .account-card-heading .account-logo-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 11px;
+  filter: drop-shadow(0 0 4px rgba(255, 43, 69, .3));
+}
+.cyber-account-card .account-card-heading:hover .account-logo-box {
+  transform: translateY(-2px);
+  box-shadow: 0 0 26px rgba(238, 38, 70, .4), inset 0 0 14px rgba(255, 55, 82, .16);
+}
+@media (max-width: 580px) {
+  .cyber-account-card .account-card-heading .account-icon.account-logo-box {
+    width: 56px;
+    height: 56px;
+    flex-basis: 56px;
+    border-radius: 13px;
+    padding: 3px;
+  }
+  .cyber-account-card .account-card-heading .account-logo-img {
+    border-radius: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cyber-account-card .account-card-heading .account-logo-box {
+    transition: none;
+  }
+  .cyber-account-card .account-card-heading:hover .account-logo-box {
+    transform: none;
+  }
+}
