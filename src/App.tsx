@@ -62,6 +62,7 @@ function App() {
   const [ign, setIgn] = useState('');
   const [uid, setUid] = useState('');
   const [streamerModeId, setStreamerModeId] = useState('');
+  const [myStreamerDraft, setMyStreamerDraft] = useState('');
   const [editingStreamerFor, setEditingStreamerFor] = useState<string | null>(null);
   const [streamerDraft, setStreamerDraft] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -160,12 +161,13 @@ function App() {
         throw new Error('Login is not configured on this deployment. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel Environment Variables, then redeploy.');
       }
       if (authMode === 'signup') {
-        const cleanName = displayName.trim(), cleanIgn = ign.trim(), cleanUid = uid.trim();
+        const cleanName = displayName.trim(), cleanIgn = ign.trim(), cleanUid = uid.trim(), cleanStreamerId = streamerModeId.trim();
         if (cleanName.length < 2 || cleanIgn.length < 2 || cleanUid.length < 3) throw new Error('Enter your name, IGN (at least 2 characters), and UID (at least 3 characters).');
+        if (!cleanStreamerId || cleanStreamerId.length > 100) throw new Error('Streamer Mode ID is mandatory. Enter your actual ID (maximum 100 characters).');
         if (photoFile && (!['image/jpeg', 'image/png', 'image/webp'].includes(photoFile.type) || photoFile.size > 5 * 1024 * 1024)) throw new Error('Choose a JPG, PNG, or WebP image that is 5 MB or smaller.');
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(), password,
-          options: { data: { display_name: cleanName, ign: cleanIgn, uid: cleanUid, streamer_mode_id: streamerModeId.trim() || null } },
+          options: { data: { display_name: cleanName, ign: cleanIgn, uid: cleanUid, streamer_mode_id: cleanStreamerId } },
         });
         if (error) throw error;
         if (data.session) await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
@@ -220,6 +222,29 @@ function App() {
     } finally {
       setResendBusy(false);
     }
+  };
+
+  const saveOwnStreamerId = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = myStreamerDraft.trim();
+    if (!value || value.length > 100) {
+      setNotice({ kind: 'error', text: 'Enter your Streamer Mode ID (maximum 100 characters).' });
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      const updated = await dashboard<Application>('set_my_streamer_id', { body: { streamer_mode_id: value } });
+      setApplication(updated);
+      setMembers(current => current.map(member => member.user_id === session?.user.id
+        ? { ...member, streamer_mode_id: value } : member));
+      setMyStreamerDraft('');
+      setNotice({ kind: 'success', text: updated.status === 'pending'
+        ? 'Streamer Mode ID saved. Your application is ready for management review.'
+        : 'Your Streamer Mode ID has been saved to your official profile.' });
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save your Streamer Mode ID.' });
+    } finally { setBusy(false); }
   };
 
   // Staff can complete Streamer Mode details for already-registered members.
@@ -484,7 +509,7 @@ function App() {
                     <label htmlFor="display-name">FULL NAME</label><input id="display-name" required minLength={2} maxLength={60} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
                     <label htmlFor="ign">IN-GAME NAME (IGN)</label><input id="ign" required minLength={2} maxLength={40} value={ign} onChange={e => setIgn(e.target.value)} placeholder="Your exact IGN" />
                     <label htmlFor="uid">PLAYER UID</label><input id="uid" required minLength={3} maxLength={40} value={uid} onChange={e => setUid(e.target.value)} placeholder="Your game UID" />
-                    <label htmlFor="streamer-mode-id">STREAMER MODE ID <span className="field-hint">Optional · for players using SMode</span></label><input id="streamer-mode-id" maxLength={100} value={streamerModeId} onChange={e => setStreamerModeId(e.target.value)} placeholder="Enter Streamer Mode ID if applicable" />
+                    <label htmlFor="streamer-mode-id">STREAMER MODE ID <span className="field-hint">REQUIRED</span></label><input id="streamer-mode-id" type="text" required maxLength={100} value={streamerModeId} onChange={e => setStreamerModeId(e.target.value)} placeholder="Enter your actual Streamer Mode ID" autoComplete="off" aria-describedby="streamer-mode-help" /><small id="streamer-mode-help" className="asy-streamer-required-note">Mandatory for new registrations. Your ID is saved with your application.</small>
                     <label htmlFor="profile-photo">PROFILE PICTURE <span className="field-hint">Optional · JPG, PNG or WebP · max 5 MB</span></label><input id="profile-photo" type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setPhotoFile(e.target.files?.[0] ?? null)} />
                   </>}
                   <div className="auth-floating-field"><input id="account-email" type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder=" " /><label htmlFor="account-email">EMAIL ADDRESS</label></div>
@@ -497,6 +522,19 @@ function App() {
                 </form><p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
               </> : <div className="signed-in-panel">
                 <span className="account-icon"><CheckCircle2 /></span><h3>You’re signed in</h3><p>{session.user.email}</p>
+                {!application?.streamer_mode_id && <form className="asy-complete-streamer-form" onSubmit={saveOwnStreamerId}>
+                  <div className="asy-complete-streamer-label"><Fingerprint size={17} /> Complete your required Streamer Mode ID</div>
+                  <p>{application
+                    ? 'Your existing membership profile is missing this field. Add it below without creating another account.'
+                    : 'Finish your existing registration by adding your Streamer Mode ID. We will submit your application for review using your saved signup details.'}</p>
+                  <label htmlFor="my-streamer-mode">STREAMER MODE ID <span>REQUIRED</span></label>
+                  <input id="my-streamer-mode" type="text" required maxLength={100} autoComplete="off"
+                    placeholder="Enter your actual Streamer Mode ID"
+                    value={myStreamerDraft} onChange={e => setMyStreamerDraft(e.target.value)} />
+                  <button type="submit" disabled={busy} className="button-primary form-submit">
+                    <Save size={16} /> {busy ? 'Saving…' : 'Save Streamer Mode ID'}
+                  </button>
+                </form>}
                 {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : <><p>No member application is linked to this account yet. If you signed up before registration was enabled, contact management.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></>}
                 <button className="button-primary form-submit" onClick={() => void signOut()}>Sign out <ArrowUpRight size={17} /></button>{isAdmin && <button className="button-quiet" onClick={() => scrollTo('admin-panel')}>Open management panel</button>}
               </div>}
