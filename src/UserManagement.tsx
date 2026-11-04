@@ -98,7 +98,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     } finally { setBusy(null); }
   }
 
-  return <section className="asy-user-management" aria-labelledby="asy-user-management-title">
+  return <section className="asy-user-management" id="user-management" aria-labelledby="asy-user-management-title">
     <div className="asy-user-management-heading">
       <div><div className="asy-user-kicker"><UserRoundCog size={16} /> OWNER ACCESS / ACCOUNT CONTROL</div>
         <h3 id="asy-user-management-title">User <span>Management.</span></h3>
