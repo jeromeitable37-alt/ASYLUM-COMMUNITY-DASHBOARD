@@ -50,10 +50,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (user.email && process.env.OWNER_EMAIL && user.email.toLowerCase() === process.env.OWNER_EMAIL.toLowerCase()) {
         await sql`INSERT INTO community_admins (user_id,role) SELECT ${userId}::uuid,'owner' WHERE NOT EXISTS (SELECT 1 FROM community_admins WHERE role='owner') ON CONFLICT (user_id) DO NOTHING`;
       }
-      if (displayName.length >= 2 && ign.length >= 2 && uid.length >= 3) {
-        await sql`INSERT INTO member_applications (id,display_name,ign,uid,streamer_mode_id) VALUES (${userId}::uuid,${displayName},${ign},${uid},${streamerId}) ON CONFLICT (id) DO NOTHING`;
+      // For new registrations, a real Streamer Mode ID must have been submitted.
+      // Existing legacy profiles without an ID remain accessible so users can complete them.
+      if (displayName.length >= 2 && ign.length >= 2 && uid.length >= 3 && streamerId) {
+        await sql`INSERT INTO member_applications (id,display_name,ign,uid,streamer_mode_id)
+          VALUES (${userId}::uuid,${displayName},${ign},${uid},${streamerId})
+          ON CONFLICT (id) DO UPDATE SET streamer_mode_id=EXCLUDED.streamer_mode_id,updated_at=now()
+          WHERE member_applications.streamer_mode_id IS NULL OR trim(member_applications.streamer_mode_id)=''`;
+        // Restore missing IDs on previously approved profiles, without changing staff-reviewed values.
+        await sql`UPDATE members SET streamer_mode_id=${streamerId},updated_at=now()
+          WHERE user_id=${userId}::uuid AND (streamer_mode_id IS NULL OR trim(streamer_mode_id)='')`;
       }
-      return res.json({ data: { created: true } });
+      return res.json({ data: { created: true, needs_streamer_mode_id: !streamerId } });
+    }
+    if (req.method === 'POST' && action === 'set_my_streamer_id') {
+      const raw = payload.streamer_mode_id;
+      if (typeof raw !== 'string' || raw.trim().length < 1 || raw.trim().length > 100)
+        return res.status(400).json({ error: 'Streamer Mode ID is required (maximum 100 characters).' });
+      const id = raw.trim();
+      const existing = await sql`SELECT id FROM member_applications WHERE id=${userId}::uuid LIMIT 1`;
+      let rows;
+      if (existing.length) {
+        rows = await sql`WITH application_updated AS (
+          UPDATE member_applications SET streamer_mode_id=${id},updated_at=now()
+          WHERE id=${userId}::uuid RETURNING *
+        ), member_updated AS (
+          UPDATE members SET streamer_mode_id=${id},updated_at=now()
+          WHERE user_id=${userId}::uuid RETURNING id
+        ) SELECT * FROM application_updated`;
+      } else {
+        const displayName = safeName(user.user_metadata?.display_name);
+        const ign = safeName(user.user_metadata?.ign,40);
+        const uid = safeName(user.user_metadata?.uid,40);
+        if (displayName.length < 2 || ign.length < 2 || uid.length < 3)
+          return res.status(422).json({ error: 'Your previous signup is missing IGN or UID. Please contact management to complete your member profile.' });
+        rows = await sql`WITH application_inserted AS (
+          INSERT INTO member_applications(id,display_name,ign,uid,streamer_mode_id)
+          VALUES (${userId}::uuid,${displayName},${ign},${uid},${id})
+          ON CONFLICT(id) DO UPDATE SET streamer_mode_id=EXCLUDED.streamer_mode_id,updated_at=now()
+          RETURNING *
+        ), member_updated AS (
+          UPDATE members SET streamer_mode_id=${id},updated_at=now()
+          WHERE user_id=${userId}::uuid RETURNING id
+        ) SELECT * FROM application_inserted`;
+      }
+      if (!rows.length) return res.status(404).json({ error: 'Unable to save the Streamer Mode ID.' });
+      return res.json({ data: rows[0] });
     }
     if (req.method === 'GET' && action === 'profile') {
       const [app, admin] = await Promise.all([
