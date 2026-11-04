@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
   try {
     if (req.method === 'GET' && action === 'directory') {
-      const rows = await sql`SELECT id,display_name,ign,uid,streamer_mode_id,team,role,photo_url FROM members ORDER BY created_at DESC LIMIT 3000`;
+      const rows = await sql`SELECT m.id,m.display_name,m.ign,m.uid,m.streamer_mode_id,m.team,m.role,m.photo_url FROM members m LEFT JOIN identities i ON i.user_id=m.user_id WHERE COALESCE(i.portal_status,'active')='active' ORDER BY m.created_at DESC LIMIT 3000`;
       return res.json({ data: rows });
     }
     const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim();
@@ -34,6 +34,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: { user }, error } = await supa.auth.getUser(bearer);
     if (error || !user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
     const userId = user.id;
+    const portal = await sql`SELECT portal_status FROM identities WHERE user_id=${userId}::uuid LIMIT 1`;
+    if (portal.length && portal[0].portal_status !== 'active')
+      return res.status(403).json({ error: portal[0].portal_status === 'disabled' ? 'Your Asylum Community portal access is disabled. Contact management.' : 'This account was removed from the official portal. Contact management to restore it.' });
     const roles = await sql`SELECT role FROM community_admins WHERE user_id = ${userId}::uuid LIMIT 1`;
     const role = roles[0]?.role as string | undefined;
     const manager = role === 'owner' || role === 'management' || role === 'admin' || role === 'moderator';
@@ -63,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
       const [applications, members] = await Promise.all([
         sql`SELECT * FROM member_applications ORDER BY created_at DESC LIMIT 2000`,
-        sql`SELECT id,display_name,ign,uid,streamer_mode_id,team,role,photo_url FROM members ORDER BY created_at DESC LIMIT 3000`,
+        sql`SELECT m.id,m.user_id,m.display_name,m.ign,m.uid,m.streamer_mode_id,m.team,m.role,m.photo_url FROM members m LEFT JOIN identities i ON i.user_id=m.user_id WHERE COALESCE(i.portal_status,'active')='active' ORDER BY m.created_at DESC LIMIT 3000`,
       ]);
       return res.json({ data: { applications, members } });
     }
@@ -71,6 +74,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!owner) return res.status(403).json({ error: 'Owner access required.' });
       const rows = await sql`SELECT a.user_id,i.email,a.role,a.created_at,a.photo_url FROM community_admins a LEFT JOIN identities i ON i.user_id=a.user_id ORDER BY a.created_at`;
       return res.json({ data: rows });
+    }
+    if (req.method === 'GET' && action === 'users') {
+      if (!owner) return res.status(403).json({ error: 'Owner access required.' });
+      const rows = await sql`
+        SELECT i.user_id,i.email,i.portal_status,i.created_at,
+               COALESCE(NULLIF(m.display_name,''),NULLIF(ap.display_name,''),'Community account') AS display_name,
+               COALESCE(NULLIF(m.ign,''),NULLIF(ap.ign,'')) AS ign,
+               COALESCE(m.photo_url,ap.photo_url) AS photo_url,
+               COALESCE(a.role,'member') AS role,
+               ap.status AS application_status
+        FROM identities i
+        LEFT JOIN members m ON m.user_id=i.user_id
+        LEFT JOIN member_applications ap ON ap.id=i.user_id
+        LEFT JOIN community_admins a ON a.user_id=i.user_id
+        ORDER BY CASE WHEN a.role='owner' THEN 0 ELSE 1 END,i.created_at DESC
+        LIMIT 500
+      `;
+      return res.json({ data: rows });
+    }
+    if (req.method === 'POST' && action === 'user_role') {
+      if (!owner) return res.status(403).json({ error: 'Owner access required.' });
+      if (!isUuid(payload.user_id) || payload.user_id===userId) return res.status(400).json({error:'Invalid target account.'});
+      const newRole = String(payload.role || '');
+      if (!['member','management','admin','moderator'].includes(newRole)) return res.status(400).json({error:'Choose a valid role.'});
+      const target = await sql`SELECT i.user_id,i.portal_status,a.role AS existing_role FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id WHERE i.user_id=${payload.user_id}::uuid LIMIT 1`;
+      if (!target.length) return res.status(404).json({error:'Registered account not found.'});
+      if (target[0].existing_role==='owner') return res.status(403).json({error:'Owner role cannot be changed here.'});
+      if (target[0].portal_status!=='active') return res.status(409).json({error:'Restore this account before changing its role.'});
+      if (newRole==='member') {
+        await sql.transaction([
+          sql`DELETE FROM community_admins WHERE user_id=${payload.user_id}::uuid AND role<>'owner'`,
+          sql`INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details) VALUES (${userId}::uuid,${payload.user_id}::uuid,'role_change',jsonb_build_object('from',${String(target[0].existing_role||'member')},'to',${newRole}))`
+        ]);
+      } else {
+        await sql.transaction([
+          sql`INSERT INTO community_admins(user_id,role) VALUES (${payload.user_id}::uuid,${newRole}) ON CONFLICT(user_id) DO UPDATE SET role=EXCLUDED.role WHERE community_admins.role<>'owner'`,
+          sql`INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details) VALUES (${userId}::uuid,${payload.user_id}::uuid,'role_change',jsonb_build_object('from',${String(target[0].existing_role||'member')},'to',${newRole}))`
+        ]);
+      }
+      return res.json({data:{user_id:payload.user_id,role:newRole}});
+    }
+    if (req.method === 'POST' && action === 'user_status') {
+      if (!owner) return res.status(403).json({error:'Owner access required.'});
+      if (!isUuid(payload.user_id) || payload.user_id===userId) return res.status(400).json({error:'Cannot change your own owner account.'});
+      const nextStatus = String(payload.portal_status || '');
+      if (!['active','disabled','removed'].includes(nextStatus)) return res.status(400).json({error:'Invalid account status.'});
+      const existing = await sql`SELECT i.portal_status,a.role FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id WHERE i.user_id=${payload.user_id}::uuid LIMIT 1`;
+      if (!existing.length) return res.status(404).json({error:'Account not found.'});
+      if (existing[0].role==='owner') return res.status(403).json({error:'Owner account is protected.'});
+      await sql.transaction([
+        sql`UPDATE identities SET portal_status=${nextStatus},portal_status_updated_at=now() WHERE user_id=${payload.user_id}::uuid`,
+        sql`INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details) VALUES (${userId}::uuid,${payload.user_id}::uuid,'portal_status_change',jsonb_build_object('from',${String(existing[0].portal_status)},'to',${nextStatus}))`,
+      ]);
+      return res.json({data:{user_id:payload.user_id,portal_status:nextStatus}});
     }
     if (req.method === 'POST' && action === 'set_streamer_id') {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
