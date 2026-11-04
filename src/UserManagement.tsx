@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, RefreshCw, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
 import { portalAuth } from './lib/portal-auth';
+import { readApiEnvelope } from './lib/read-api';
 import './user-management.css';
 
 export type PortalUser = {
@@ -27,9 +28,8 @@ async function accountApi<T>(action: string, payload?: Record<string, unknown>):
     headers: { Authorization: `Bearer ${session.access_token}`, ...(payload ? { 'Content-Type': 'application/json' } : {}) },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'Unable to update account.');
-  return result.data as T;
+  const result = await readApiEnvelope<T>(response, 'Unable to update the account right now.');
+  return result.data;
 }
 
 const roleLabels: Record<PortalUser['role'], string> = {
