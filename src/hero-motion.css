@@ -1,0 +1,81 @@
+
+/* ASYLUM // interactive emblem: GPU-friendly, no dependencies */
+.hero-emblem{
+  --hero-tilt-x:0deg;--hero-tilt-y:0deg;
+  --hero-shift-x:0px;--hero-shift-y:0px;
+  width:100%;border:0;outline:0;background:transparent;color:inherit;
+  cursor:pointer;appearance:none;perspective:950px;isolation:isolate;
+  -webkit-tap-highlight-color:transparent;
+}
+.hero-emblem:focus-visible{outline:2px solid #ff8190;outline-offset:-7px;border-radius:25px}
+.hero-emblem:before{content:"";position:absolute;z-index:-1;inset:10% 4%;
+ background:radial-gradient(circle at center,#b52c5352 0%,#5d182c20 38%,transparent 73%);
+ filter:blur(18px);animation:asy-nova-aura 5s ease-in-out infinite;pointer-events:none}
+.hero-emblem .emblem-orbit{position:absolute;pointer-events:none;border-radius:50%;
+ width:min(39vw,400px);height:min(39vw,400px);
+ background:linear-gradient(#0c0b10,#0c0b10) padding-box,
+ conic-gradient(from 0deg,transparent 2%,#fa5b70 11%,transparent 19%,transparent 45%,#7e2342 59%,transparent 71%,#f04457 90%,transparent) border-box;
+ border:1px solid transparent;box-shadow:0 0 22px #b92b4814;
+ animation:asy-orbit-spin 23s linear infinite;
+}
+.hero-emblem .emblem-orbit-two{width:min(43.5vw,445px);height:min(43.5vw,445px);
+ border-style:dashed;border-color:#c930464f;background:none;animation-duration:37s;animation-direction:reverse}
+.hero-emblem .emblem-orbit-three{width:min(48vw,490px);height:min(48vw,490px);
+ border-color:#f2485528;background:none;animation-duration:51s;box-shadow:none}
+.hero-emblem .emblem-orbit-three:before,.hero-emblem .emblem-orbit-two:after{
+ content:"";position:absolute;left:50%;top:-4px;width:8px;height:8px;border-radius:50%;
+ background:#ff7785;box-shadow:0 0 11px #f5455e,0 0 25px #f5455e}
+.hero-emblem .emblem-halo{animation:asy-emblem-halo 6s ease-in-out infinite}
+.hero-emblem .emblem-core{position:relative;z-index:3;display:grid;place-items:center;
+ transform-style:preserve-3d;transform:rotateX(var(--hero-tilt-x)) rotateY(var(--hero-tilt-y));
+ transition:transform .18s ease-out;will-change:transform;}
+.hero-emblem .emblem-core img{
+ display:block;width:min(31vw,320px);height:min(31vw,320px);object-fit:contain;
+ border-radius:50%;mix-blend-mode:screen;
+ filter:drop-shadow(0 0 17px #ef395a74) drop-shadow(0 0 35px #ef395a35);
+ animation:asy-logo-float 5.2s ease-in-out infinite;
+}
+.hero-emblem .emblem-core:after{content:"";position:absolute;z-index:1;inset:1%;
+ border-radius:50%;border:1px solid #ed3c4c24;box-shadow:0 0 50px #f6365027;
+ animation:asy-logo-aura 3.4s ease-in-out infinite;pointer-events:none;}
+.hero-emblem .emblem-scanline{pointer-events:none;position:absolute;z-index:4;
+ width:min(33vw,330px);height:min(33vw,330px);
+ border-radius:50%;overflow:hidden;opacity:.38}
+.hero-emblem .emblem-scanline:after{content:"";position:absolute;left:-30%;right:-30%;top:-25%;
+ height:18%;transform:rotate(-12deg);background:linear-gradient(transparent,#ff8c9620,#fff1f33a,#ff8c9620,transparent);
+ animation:asy-scanner 6s ease-in-out infinite;}
+.hero-emblem .emblem-caption{z-index:5;margin-top:28px}
+.hero-emblem .emblem-boost-hint{position:absolute;bottom:2%;font:700 9px/1.4 'Space Grotesk',sans-serif;
+ letter-spacing:.17em;color:#a87a8b;text-transform:uppercase;transition:color .2s}
+.hero-emblem:hover .emblem-boost-hint{color:#f6a8b8}
+.hero-emblem.is-boosted:before{animation-duration:1.6s}
+.hero-emblem.is-boosted .emblem-orbit{animation-duration:9s;filter:drop-shadow(0 0 8px #ff5064)}
+.hero-emblem.is-boosted .emblem-orbit-two{animation-duration:15s}
+.hero-emblem.is-boosted .emblem-orbit-three{animation-duration:20s}
+.hero-emblem.is-boosted .emblem-core img{filter:drop-shadow(0 0 27px #f6264fc7) drop-shadow(0 0 63px #f6264f75)}
+@keyframes asy-orbit-spin{to{transform:rotate(360deg)}}
+@keyframes asy-logo-float{0%,100%{translate:0 0}50%{translate:0 -12px}}
+@keyframes asy-scanner{0%,20%{transform:translateY(-160%) rotate(-12deg)}65%,100%{transform:translateY(650%) rotate(-12deg)}}
+@keyframes asy-logo-aura{0%,100%{opacity:.3;scale:.985}50%{opacity:.9;scale:1.07}}
+@keyframes asy-emblem-halo{0%,100%{opacity:.47;scale:.95}50%{opacity:1;scale:1.045}}
+@keyframes asy-nova-aura{0%,100%{opacity:.42;scale:.92}50%{opacity:.92;scale:1.04}}
+@media(max-width:900px){
+ .hero-emblem .emblem-orbit{width:min(43vw,330px);height:min(43vw,330px)}
+ .hero-emblem .emblem-orbit-two{width:min(49vw,375px);height:min(49vw,375px)}
+ .hero-emblem .emblem-orbit-three{width:min(55vw,410px);height:min(55vw,410px)}
+}
+@media(max-width:650px){
+ .hero-emblem{min-height:270px}
+ .hero-emblem .emblem-core img{width:170px;height:170px}
+ .hero-emblem .emblem-scanline{width:178px;height:178px}
+ .hero-emblem .emblem-orbit{width:205px;height:205px}
+ .hero-emblem .emblem-orbit-two{width:239px;height:239px}
+ .hero-emblem .emblem-orbit-three{width:260px;height:260px}
+ .hero-emblem .emblem-boost-hint{bottom:0;font-size:8px}
+ .hero-emblem .emblem-caption{margin-top:15px;letter-spacing:1.5px;font-size:8px}
+}
+@media(prefers-reduced-motion:reduce){
+ .hero-emblem::before,.hero-emblem .emblem-orbit,.hero-emblem .emblem-core img,
+ .hero-emblem .emblem-core:after,.hero-emblem .emblem-scanline:after,.hero-emblem .emblem-halo{animation:none!important}
+ .hero-emblem .emblem-core{transition:none;transform:none!important}
+}
