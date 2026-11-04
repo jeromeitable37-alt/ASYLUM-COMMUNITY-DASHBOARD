@@ -4,8 +4,9 @@ import {
   Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
   LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
-import type { Session } from '@supabase/supabase-js';
-import { supabase } from './lib/supabase';
+import { portalAuth, neonEmailAuth, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
+import type { PortalSession } from './lib/portal-auth';
+import { uploadPortalImage } from './lib/portal-images';
 import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
@@ -26,7 +27,7 @@ const managementRoles = [
 ];
 
 async function dashboard<T>(action: string, opts?: { body?: Record<string, unknown>, token?: string }): Promise<T> {
-  const token = opts?.token || (await supabase.auth.getSession()).data.session?.access_token;
+  const token = opts?.token || (await portalAuth.getSession()).data.session?.access_token;
   const res = await fetch('/api/dashboard?action=' + encodeURIComponent(action), {
     method: opts?.body ? 'POST' : 'GET',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts?.body ? { 'Content-Type': 'application/json' } : {}) },
@@ -38,7 +39,7 @@ async function dashboard<T>(action: string, opts?: { body?: Record<string, unkno
 }
 
 function App() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<PortalSession | null>(null);
   const [activeTab, setActiveTab] = useState('Members');
   const [query, setQuery] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -57,6 +58,12 @@ function App() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
+  const [emailOtp, setEmailOtp] = useState('');
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [missingFullName, setMissingFullName] = useState('');
+  const [missingIgn, setMissingIgn] = useState('');
+  const [missingUid, setMissingUid] = useState('');
+  const [missingStreamer, setMissingStreamer] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [ign, setIgn] = useState('');
@@ -70,8 +77,8 @@ function App() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    portalAuth.getSession().then(({ data }) => setSession((data.session || null) as PortalSession | null));
+    const { data: listener } = portalAuth.onAuthStateChange((_event, nextSession) => setSession((nextSession || null) as PortalSession | null));
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -85,7 +92,18 @@ function App() {
           if (active) { setIsAdmin(false); setCurrentRole(null); setAdminAccounts([]); setApplication(null); setApplications([]); }
           return;
         }
-        await dashboard('bootstrap', { body: { init: true } });
+        const draft = readPendingRegistration();
+        if (draft && draft.email.toLowerCase() === session.user.email?.toLowerCase()) {
+          try {
+            await dashboard('bootstrap', { body: {
+              display_name: draft.display_name, ign: draft.ign, uid: draft.uid,
+              streamer_mode_id: draft.streamer_mode_id,
+            } });
+            clearPendingRegistration();
+          } catch (error) {
+            if (!(error instanceof Error) || !/verify your Neon|verified email|needs an Owner-approved/i.test(error.message)) throw error;
+          }
+        }
         const profile = await dashboard<{ application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
         if (!active) return;
         const role = profile.admin?.role ?? null;
@@ -125,30 +143,19 @@ function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const uploadPhoto = async (userId: string, file: File) => {
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('Use a JPG, PNG, or WebP image.');
-    if (file.size > 5 * 1024 * 1024) throw new Error('Profile pictures must be 5 MB or smaller.');
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-    const path = userId + '/' + Date.now() + '-' + safeName;
-    const { error } = await supabase.storage.from('community-photos').upload(path, file, { upsert: true, contentType: file.type });
-    if (error) throw error;
-    const { data } = supabase.storage.from('community-photos').getPublicUrl(path);
-    await dashboard('bootstrap', { body: { init: true } });
-    await dashboard('photo', { body: { kind: 'application', photo_url: data.publicUrl } });
+  const uploadPhoto = async (_userId: string, file: File) => {
+    const publicUrl = await uploadPortalImage(file, 'application');
+    await dashboard('photo', { body: { kind: 'application', photo_url: publicUrl } });
   };
 
   const uploadOwnMemberPhoto = async (file: File) => {
     if (!session?.user) throw new Error('Sign in to update your profile picture.');
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Choose a JPG, PNG, or WebP under 5 MB.');
     setBusy(true); setNotice(null);
     try {
-      const path = session.user.id + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-      const { error } = await supabase.storage.from('community-photos').upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data } = supabase.storage.from('community-photos').getPublicUrl(path);
-      await dashboard('photo', { body: { kind: 'self', photo_url: data.publicUrl } });
-      setApplication(current => current ? { ...current, photo_url: data.publicUrl } : current);
-      setMembers(current => current.map(member => member.user_id === session.user.id ? { ...member, photo_url: data.publicUrl } : member));
+      const publicUrl = await uploadPortalImage(file, 'self');
+      await dashboard('photo', { body: { kind: 'self', photo_url: publicUrl } });
+      setApplication(current => current ? { ...current, photo_url: publicUrl } : current);
+      setMembers(current => current.map(member => member.user_id === session.user.id ? { ...member, photo_url: publicUrl } : member));
       setNotice({ kind: 'success', text: 'Your profile picture has been updated.' });
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save your picture.' }); }
     finally { setBusy(false); }
@@ -165,7 +172,7 @@ function App() {
         if (cleanName.length < 2 || cleanIgn.length < 2 || cleanUid.length < 3) throw new Error('Enter your name, IGN (at least 2 characters), and UID (at least 3 characters).');
         if (!cleanStreamerId || cleanStreamerId.length > 100) throw new Error('Streamer Mode ID is mandatory. Enter your actual ID (maximum 100 characters).');
         if (photoFile && (!['image/jpeg', 'image/png', 'image/webp'].includes(photoFile.type) || photoFile.size > 5 * 1024 * 1024)) throw new Error('Choose a JPG, PNG, or WebP image that is 5 MB or smaller.');
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error } = await portalAuth.signUp({
           email: email.trim(), password,
           options: { data: { display_name: cleanName, ign: cleanIgn, uid: cleanUid, streamer_mode_id: cleanStreamerId } },
         });
@@ -182,7 +189,7 @@ function App() {
           ? 'Registration submitted! Your application is waiting for management approval.'
           : 'Check your email to confirm your account, then sign in to finish your profile photo upload. Your application will appear after you confirm your email and sign in.' });
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        const { data, error } = await portalAuth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
         if (!data.session?.access_token) throw new Error('Authentication succeeded, but no login session was returned.');
         setConfirmationEmail(null);
@@ -195,7 +202,7 @@ function App() {
         } catch (setupError) {
           const message = setupError instanceof Error ? setupError.message : 'Check the database and Vercel settings.';
           if (/disabled|removed from the official portal/i.test(message)) {
-            await supabase.auth.signOut();
+            await portalAuth.signOut();
             setShowAuth(true);
           }
           setNotice({ kind: 'error', text: message.includes('disabled') || message.includes('removed') ? message : 'Login succeeded, but dashboard initialization failed: ' + message });
@@ -214,7 +221,7 @@ function App() {
     setResendBusy(true);
     setNotice(null);
     try {
-      const { error } = await supabase.auth.resend({
+      const { error } = await portalAuth.resend({
         type: 'signup',
         email: confirmationEmail.trim(),
       });
@@ -336,7 +343,7 @@ function App() {
     finally { setBusy(false); }
   };
 
-  const signOut = async () => { await supabase.auth.signOut(); setNotice({ kind: 'info', text: 'You have signed out.' }); setShowAuth(false); };
+  const signOut = async () => { await portalAuth.signOut(); setNotice({ kind: 'info', text: 'You have signed out.' }); setShowAuth(false); };
 
   return (
     <div className="site-shell">
