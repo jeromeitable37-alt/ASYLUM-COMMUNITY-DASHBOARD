@@ -99,3 +99,38 @@ CREATE TABLE IF NOT EXISTS community_management_profiles (
 CREATE INDEX IF NOT EXISTS idx_team_members_member ON community_team_members(member_id);
 CREATE INDEX IF NOT EXISTS idx_achievements_order ON community_achievements(sort_order,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gallery_order ON community_gallery(sort_order,created_at DESC);
+
+
+-- 2026-11: portal-only user lifecycle controls. Never delete shared Supabase auth users here.
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS portal_status text NOT NULL DEFAULT 'active';
+ALTER TABLE identities ADD COLUMN IF NOT EXISTS portal_status_updated_at timestamptz NOT NULL DEFAULT now();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='identities_portal_status_check') THEN
+    ALTER TABLE identities ADD CONSTRAINT identities_portal_status_check
+      CHECK (portal_status IN ('active','disabled','removed'));
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS portal_account_audit (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  actor_user_id uuid NOT NULL,
+  target_user_id uuid NOT NULL,
+  action text NOT NULL CHECK (action IN ('role_change','portal_status_change')),
+  details jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS portal_account_audit_created_at_idx ON portal_account_audit(created_at DESC);
+CREATE INDEX IF NOT EXISTS portal_account_audit_target_idx ON portal_account_audit(target_user_id,created_at DESC);
+
+-- Community story is editable by authorized staff; no invented founder or founding date.
+CREATE TABLE IF NOT EXISTS community_about (
+  id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  headline text NOT NULL DEFAULT 'More than a squad. One ASYLUM Community.',
+  description text NOT NULL DEFAULT 'ASYLUM COMMUNITY brings Call of Duty: Mobile players together to compete, build friendships, and grow through teamwork, respect, and shared experiences.',
+  mission text NOT NULL DEFAULT 'One community where every player can find a place, contribute, and make their mark.',
+  founder text NOT NULL DEFAULT 'To be announced',
+  founded_on date,
+  origin text NOT NULL DEFAULT 'Philippines · CODM community',
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO community_about (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
