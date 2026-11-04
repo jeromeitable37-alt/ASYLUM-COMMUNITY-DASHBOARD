@@ -149,6 +149,9 @@ function App() {
   const submitAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setNotice(null);
     try {
+      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        throw new Error('Login is not configured on this deployment. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel Environment Variables, then redeploy.');
+      }
       if (authMode === 'signup') {
         const cleanName = displayName.trim(), cleanIgn = ign.trim(), cleanUid = uid.trim();
         if (cleanName.length < 2 || cleanIgn.length < 2 || cleanUid.length < 3) throw new Error('Enter your name, IGN (at least 2 characters), and UID (at least 3 characters).');
@@ -167,10 +170,16 @@ function App() {
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
-        await dashboard('bootstrap', { body: { init: true }, token: data.session?.access_token });
-        if (data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
+        if (!data.session?.access_token) throw new Error('Authentication succeeded, but no login session was returned.');
         setShowAuth(false);
-        setNotice({ kind: 'success', text: 'You are signed in.' });
+        setPassword('');
+        try {
+          await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
+          if (data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
+          setNotice({ kind: 'success', text: 'You are signed in.' });
+        } catch (setupError) {
+          setNotice({ kind: 'error', text: 'Login succeeded, but dashboard initialization failed: ' + (setupError instanceof Error ? setupError.message : 'Check the database and Vercel settings.') });
+        }
       }
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Something went wrong. Please try again.' });
