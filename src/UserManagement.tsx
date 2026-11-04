@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, RefreshCw, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
-import { supabase } from './lib/supabase';
+import { portalAuth } from './lib/portal-auth';
 import './user-management.css';
 
 export type PortalUser = {
@@ -20,7 +20,7 @@ export type PortalUser = {
 type Props = { currentUserId: string | null; onRoleUpdated?: () => void };
 
 async function accountApi<T>(action: string, payload?: Record<string, unknown>): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await portalAuth.getSession();
   if (!session) throw new Error('Session expired. Please sign in again.');
   const response = await fetch(`/api/dashboard?action=${encodeURIComponent(action)}`, {
     method: payload ? 'POST' : 'GET',
@@ -99,7 +99,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     const question = nextStatus === 'active'
       ? `Restore ${user.ign || user.display_name}'s Asylum portal access?`
       : isRemove
-      ? `Archive ${user.ign || user.display_name} from this dashboard? This hides their profile and blocks their dashboard access. Their Supabase login and access to other websites will remain unchanged. You can restore this later.`
+      ? `Archive ${user.ign || user.display_name} from this dashboard? This hides their profile and blocks their dashboard access. Their separate Neon Auth account remains intact; archive only affects this dashboard. You can restore this later.`
       : `Disable ${user.ign || user.display_name}'s Asylum portal access? This does not affect the separate Recruitment website.`;
     if (!window.confirm(question)) return;
     setBusy(user.user_id); setNotice(null);
@@ -162,6 +162,6 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
       })}
       {filtered.length === 0 && <div className="asy-user-empty">No accounts match this filter. Use “Unlinked logins” to review sign-in records without member profiles, or “Removed” to restore archived entries.</div>}
     </div>}
-    <div className="asy-user-footnote"><LockKeyhole size={15} /><span><strong>Portal-only management:</strong> Disable/Archive blocks access to this dashboard and hides its public member profile. No Supabase authentication account is deleted. Recruitment and other websites remain unaffected. Check “Unlinked logins” before archiving records without member applications.</span></div>
+    <div className="asy-user-footnote"><LockKeyhole size={15} /><span><strong>Portal-only management:</strong> Disable/Archive blocks access to this dashboard and hides its public member profile. Neon Auth accounts are preserved. Recruitment and other websites use separate authentication and remain unaffected. Check “Unlinked logins” before archiving records without member applications.</span></div>
   </section>;
 }
