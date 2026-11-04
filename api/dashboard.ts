@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = user.id;
     const roles = await sql`SELECT role FROM community_admins WHERE user_id = ${userId}::uuid LIMIT 1`;
     const role = roles[0]?.role as string | undefined;
-    const manager = role === 'owner' || role === 'management' || role === 'admin';
+    const manager = role === 'owner' || role === 'management' || role === 'admin' || role === 'moderator';
     const owner = role === 'owner';
     if (req.method === 'POST' && action === 'bootstrap') {
       const displayName = safeName(user.user_metadata?.display_name);
@@ -84,12 +84,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
       if (!isUuid(payload.id) || !['approved','rejected'].includes(payload.status)) return res.status(400).json({ error: 'Invalid application or decision.' });
       const decision = payload.status as 'approved' | 'rejected';
-      const updated = await sql`UPDATE member_applications SET status=${decision},reviewed_by=${userId}::uuid,review_note=${decision === 'approved' ? 'Approved by management' : 'Not approved by management'},updated_at=now() WHERE id=${payload.id}::uuid AND status='pending' RETURNING *`;
-      if (!updated.length) return res.status(409).json({ error: 'Application was already reviewed or not found.' });
+      // CTE keeps the approval and roster insertion in one PostgreSQL statement.
+      let updated;
       if (decision === 'approved') {
-        const row = updated[0];
-        await sql`INSERT INTO members (user_id,display_name,ign,uid,photo_url) VALUES (${row.id}::uuid,${row.display_name},${row.ign},${row.uid},${row.photo_url}) ON CONFLICT (user_id) DO UPDATE SET display_name=excluded.display_name,ign=excluded.ign,uid=excluded.uid,photo_url=excluded.photo_url,updated_at=now()`;
+        updated = await sql`WITH decision AS (
+          UPDATE member_applications SET status='approved',reviewed_by=${userId}::uuid,
+            review_note='Approved by management',updated_at=now()
+          WHERE id=${payload.id}::uuid AND status='pending' RETURNING *
+        ), registered AS (
+          INSERT INTO members (user_id,display_name,ign,uid,photo_url)
+          SELECT id,display_name,ign,uid,photo_url FROM decision
+          ON CONFLICT (user_id) DO UPDATE SET display_name=excluded.display_name,
+             ign=excluded.ign,uid=excluded.uid,photo_url=excluded.photo_url,updated_at=now()
+          RETURNING id
+        ) SELECT decision.* FROM decision JOIN registered ON registered.id IS NOT NULL`;
+      } else {
+        updated = await sql`UPDATE member_applications SET status='rejected',reviewed_by=${userId}::uuid,
+          review_note='Not approved by management',updated_at=now()
+          WHERE id=${payload.id}::uuid AND status='pending' RETURNING *`;
       }
+      if (!updated.length) return res.status(409).json({ error: 'Application was already reviewed or not found.' });
       return res.json({ data: updated[0] });
     }
     if (req.method === 'POST' && action === 'remove_member') {
