@@ -5,11 +5,22 @@ import { neon } from '@neondatabase/serverless';
 const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 const isImageUrl = (v: unknown) => typeof v === 'string' && v.length < 2048 && /^https:\/\//i.test(v);
 const safeName = (v: unknown, len = 60) => typeof v === 'string' ? v.trim().slice(0, len) : '';
-const supa = createClient(process.env.SUPABASE_URL || '', process.env.SUPABASE_ANON_KEY || '', { auth: { persistSession: false } });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store');
+  // Public readiness check; never return credentials or any member data.
+  if (req.method === 'GET' && req.query.action === 'health') {
+    const configured = Boolean(process.env.DATABASE_URL && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
+    if (!configured) return res.status(503).json({ ok: false, status: 'missing_configuration', checks: { databaseUrl: Boolean(process.env.DATABASE_URL), supabaseUrl: Boolean(process.env.SUPABASE_URL), supabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY), ownerEmail: Boolean(process.env.OWNER_EMAIL) } });
+    try {
+      const check = await neon(process.env.DATABASE_URL!)`SELECT 1 AS connected`;
+      return res.status(200).json({ ok: check.length === 1, status: 'ready' });
+    } catch {
+      return res.status(503).json({ ok: false, status: 'database_connection_failed' });
+    }
+  }
   if (!process.env.DATABASE_URL || !process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) return res.status(503).json({ error: 'Database or authentication environment is not configured.' });
+  const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, { auth: { persistSession: false } });
   const sql = neon(process.env.DATABASE_URL);
   const action = String(req.query.action || '');
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
