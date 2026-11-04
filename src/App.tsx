@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
-  LockKeyhole, LogIn, Menu, Search, ShieldCheck, Swords, UserPlus, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2,
+  LockKeyhole, LogIn, Menu, Search, ShieldCheck, Swords, UserPlus, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import CommunityShowcase from './CommunityShowcase';
+import AboutAsylum from './AboutAsylum';
+import UserManagement from './UserManagement';
 
 type Member = { id: string; user_id?: string | null; display_name: string; ign: string | null; uid: string | null; streamer_mode_id: string | null; team: string | null; role: string; photo_url: string | null };
 type Application = { id: string; display_name: string; ign: string; uid: string; streamer_mode_id: string | null; photo_url: string | null; status: 'pending' | 'approved' | 'rejected'; review_note: string | null; created_at: string };
@@ -43,14 +45,13 @@ function App() {
   const [currentRole, setCurrentRole] = useState<AdminRole | null>(null);
   const [adminAccounts, setAdminAccounts] = useState<AdminAccount[]>([]);
   const [managementPhotoUrl, setManagementPhotoUrl] = useState<string | null>(null);
-  const [adminEmail, setAdminEmail] = useState('');
-  const [adminRole, setAdminRole] = useState<'management' | 'moderator' | 'remove'>('management');
   const [transferEmail, setTransferEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [application, setApplication] = useState<Application | null>(null);
   const [applications, setApplications] = useState<Application[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [ign, setIgn] = useState('');
   const [uid, setUid] = useState('');
@@ -178,7 +179,12 @@ function App() {
           if (data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
           setNotice({ kind: 'success', text: 'You are signed in.' });
         } catch (setupError) {
-          setNotice({ kind: 'error', text: 'Login succeeded, but dashboard initialization failed: ' + (setupError instanceof Error ? setupError.message : 'Check the database and Vercel settings.') });
+          const message = setupError instanceof Error ? setupError.message : 'Check the database and Vercel settings.';
+          if (/disabled|removed from the official portal/i.test(message)) {
+            await supabase.auth.signOut();
+            setShowAuth(true);
+          }
+          setNotice({ kind: 'error', text: message.includes('disabled') || message.includes('removed') ? message : 'Login succeeded, but dashboard initialization failed: ' + message });
         }
       }
     } catch (error) {
@@ -257,19 +263,6 @@ function App() {
     finally { setBusy(false); }
   };
 
-  const updateAdminRole = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (currentRole !== 'owner') return;
-    setBusy(true); setNotice(null);
-    try {
-      await dashboard('set_role', { body: { email: adminEmail.trim(), role: adminRole } });
-      setAdminEmail('');
-      setAdminAccounts(await dashboard<AdminAccount[]>('admins'));
-      setNotice({ kind: 'success', text: adminRole === 'remove' ? 'Admin access removed.' : 'Admin role saved.' });
-    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save role.' }); }
-    finally { setBusy(false); }
-  };
-
   const transferOwnership = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (currentRole !== 'owner' || !window.confirm('Transfer ownership to ' + transferEmail.trim() + '? You will become a Management Admin and cannot take ownership back yourself.')) return;
@@ -295,6 +288,7 @@ function App() {
         <nav className={mobileOpen ? 'nav-links open' : 'nav-links'}>
           <button onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}>Members</button>
           <button onClick={() => scrollTo('teams')}>Teams</button>
+          <button onClick={() => scrollTo('about-asylum')}>About</button>
           <button onClick={() => scrollTo('management-showcase')}>Management</button>
           <button onClick={() => scrollTo('achievements')}>Achievements</button>
           <button onClick={() => scrollTo('gallery')}>Gallery</button>
@@ -357,6 +351,8 @@ function App() {
           <div className="network-assurance"><Globe2 size={16} /><span>One official community, three connected experiences. Preview the Recruitment and Jersey sections before choosing their dedicated sites.</span></div>
         </section>
 
+        <AboutAsylum isAdmin={isAdmin} />
+
         {notice && <div className={'site-notice ' + notice.kind} role="status">{notice.text}<button onClick={() => setNotice(null)} aria-label="Dismiss notice"><X size={16} /></button></div>}
 
         <section className="verify-section section-wrap" id="verify">
@@ -411,9 +407,11 @@ function App() {
         <section className="account-section section-wrap" id="account">
           <div className="section-kicker">10 / MEMBER ACCESS</div><div className="account-layout">
             <div className="section-intro"><h2>Your place in<br /><span>Asylum Community.</span></h2><p>Already part of ASYLUM? Register or sign in to manage your official member profile. New applicants can explore our Recruitment section above.</p><div className="notice"><ShieldCheck size={18} /><span>Your email and account details stay private. Only approved profile information appears in the directory.</span></div></div>
-            <div className="account-card">
+            <div className="account-card cyber-account-card">
+              <div className="auth-mood-particles" aria-hidden="true"><span /><span /><span /><span /><span /></div>
               {!session || showAuth ? <>
-                <div className="account-card-heading"><span className="account-icon">{authMode === 'signup' ? <UserPlus /> : <LogIn />}</span><div><h3>{authMode === 'signup' ? 'Apply for membership' : 'Welcome back'}</h3><p>{authMode === 'signup' ? 'Create an account for management review.' : 'Sign in to check your application.'}</p></div></div>
+                <div className="auth-overline"><Sparkles size={13} /> SECURE ASYLUM ACCESS / 2026</div>
+                <div className="account-card-heading"><span className="account-icon">{authMode === 'signup' ? <UserPlus /> : <LogIn />}</span><div><h3>{authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
                 <div className="auth-switch"><button className={authMode === 'signup' ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setNotice(null); }}>Register</button><button className={authMode === 'signin' ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setNotice(null); }}>Sign in</button></div>
                 <form className="member-form" onSubmit={submitAuth}>
                   {authMode === 'signup' && <>
@@ -423,9 +421,13 @@ function App() {
                     <label htmlFor="streamer-mode-id">STREAMER MODE ID <span className="field-hint">Optional · for players using SMode</span></label><input id="streamer-mode-id" maxLength={100} value={streamerModeId} onChange={e => setStreamerModeId(e.target.value)} placeholder="Enter Streamer Mode ID if applicable" />
                     <label htmlFor="profile-photo">PROFILE PICTURE <span className="field-hint">Optional · JPG, PNG or WebP · max 5 MB</span></label><input id="profile-photo" type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setPhotoFile(e.target.files?.[0] ?? null)} />
                   </>}
-                  <label htmlFor="account-email">EMAIL ADDRESS</label><input id="account-email" type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
-                  <label htmlFor="account-password">PASSWORD</label><input id="account-password" type="password" required minLength={8} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters" />
-                  <button className="button-primary form-submit" type="submit" disabled={busy}>{busy ? 'Please wait…' : authMode === 'signup' ? 'Submit application' : 'Sign in'} <ArrowUpRight size={17} /></button>
+                  <div className="auth-floating-field"><input id="account-email" type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder=" " /><label htmlFor="account-email">EMAIL ADDRESS</label></div>
+                  <div className="auth-password-wrap">
+                    <div className="auth-floating-field"><input id="account-password" type={showPassword ? 'text' : 'password'} required minLength={8} autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={e => setPassword(e.target.value)} placeholder=" " /><label htmlFor="account-password">PASSWORD</label></div>
+                    <button className="auth-password-toggle" type="button" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</button>
+                  </div>
+                  {notice?.kind === 'error' && <div className="auth-error-inline" role="alert"><X size={14} /> {notice.text}</div>}
+                  <button className="button-primary form-submit auth-neon-submit" type="submit" disabled={busy}>{busy ? 'Securing your session…' : authMode === 'signup' ? 'Create ASYLUM profile' : 'Access community'} <ArrowUpRight size={17} /></button>
                 </form><p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
               </> : <div className="signed-in-panel">
                 <span className="account-icon"><CheckCircle2 /></span><h3>You’re signed in</h3><p>{session.user.email}</p>
@@ -449,9 +451,7 @@ function App() {
           </div>
           <div className="admin-records"><h3>Recent applications</h3>{applications.slice(0, 8).map(item => <div className="admin-record" key={item.id}><span>{item.ign} <small>· {item.uid}</small></span><span className={'status-text ' + item.status}>{item.status}</span></div>)}</div>
           {currentRole === 'owner' && <div className="owner-tools">
-            <div className="section-kicker">OWNER CONTROLS</div><h3>Admin & ownership management</h3><p>Only the current Owner can assign or remove staff roles. The target account must register first.</p>
-            <div className="owner-admin-list">{adminAccounts.map(account => <div className="owner-admin-row" key={account.user_id}><div><strong>{account.email || 'Registered account'}</strong><small>{account.user_id}</small></div><span className={'role-chip ' + account.role}>{account.role === 'owner' ? 'Owner' : account.role === 'management' ? 'Management Admin' : 'Moderator'}</span></div>)}</div>
-            <form className="owner-form" onSubmit={updateAdminRole}><label htmlFor="admin-email">REGISTERED ACCOUNT EMAIL</label><input id="admin-email" type="email" required value={adminEmail} onChange={e => setAdminEmail(e.target.value)} placeholder="person@example.com" /><label htmlFor="admin-role">ROLE ACTION</label><select id="admin-role" value={adminRole} onChange={e => setAdminRole(e.target.value as 'management' | 'moderator' | 'remove')}><option value="management">Management Admin</option><option value="moderator">Moderator</option><option value="remove">Remove admin access</option></select><button className="button-primary form-submit" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save role'} <ArrowUpRight size={17} /></button></form>
+            <UserManagement currentUserId={session?.user.id || null} onRoleUpdated={() => { void dashboard<AdminAccount[]>('admins').then(setAdminAccounts).catch(() => {}); }} />
             <form className="owner-form transfer-form" onSubmit={transferOwnership}><label htmlFor="transfer-email">TRANSFER COMMUNITY OWNERSHIP</label><p>The new Owner must already have a registered account. Your account will automatically become a Management Admin after transfer.</p><input id="transfer-email" type="email" required value={transferEmail} onChange={e => setTransferEmail(e.target.value)} placeholder="newowner@example.com" /><button className="transfer-button" type="submit" disabled={busy}>Transfer ownership <Crown size={16} /></button></form>
           </div>}
         </section>}
