@@ -31,16 +31,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   try {
     if (req.method === 'GET' && action === 'public') {
-      const [teams, roster, achievements, gallery, management] = await Promise.all([
+      const [teams, roster, achievements, gallery, management, aboutRows] = await Promise.all([
         sql`SELECT id,name,description,logo_url,captain_member_id,sort_order FROM community_teams ORDER BY sort_order,name LIMIT 100`,
         sql`SELECT tm.team_id,m.id,m.ign,m.display_name,m.photo_url,m.role
             FROM community_team_members tm JOIN members m ON m.id=tm.member_id
+            LEFT JOIN identities i ON i.user_id=m.user_id
+            WHERE COALESCE(i.portal_status,'active')='active'
             ORDER BY m.ign,m.display_name LIMIT 3000`,
         sql`SELECT id,title,subtitle,details,badge,image_url,achieved_on,sort_order
             FROM community_achievements ORDER BY sort_order,created_at DESC LIMIT 100`,
         sql`SELECT id,title,caption,category,image_url,sort_order,created_at
             FROM community_gallery ORDER BY sort_order,created_at DESC LIMIT 300`,
         sql`SELECT a.user_id,a.role,
+              COALESCE(NULLIF(m.ign,''),NULLIF(ap.ign,'')) AS ign,
               COALESCE(NULLIF(p.display_name,''),NULLIF(m.display_name,''),initcap(a.role)||' Team') AS display_name,
               COALESCE(NULLIF(p.title,''),initcap(a.role)) AS title,
               COALESCE(p.bio,'') AS bio,
@@ -48,8 +51,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             FROM community_admins a
             LEFT JOIN community_management_profiles p ON p.user_id=a.user_id
             LEFT JOIN members m ON m.user_id=a.user_id
-            WHERE COALESCE(p.show_public,true)=true
+            LEFT JOIN member_applications ap ON ap.id=a.user_id
+            LEFT JOIN identities i ON i.user_id=a.user_id
+            WHERE COALESCE(p.show_public,true)=true AND COALESCE(i.portal_status,'active')='active'
             ORDER BY CASE a.role WHEN 'owner' THEN 0 WHEN 'management' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,p.sort_order,a.created_at LIMIT 100`,
+        sql`SELECT * FROM community_about WHERE id=1 LIMIT 1`,
       ]);
       return res.status(200).json({
         data: { teams: teams.map(team => ({
@@ -58,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             id: member.id, ign: member.ign, display_name: member.display_name,
             photo_url: member.photo_url, role: member.role,
           })),
-        })), achievements, gallery, management },
+        })), achievements, gallery, management, about: aboutRows[0] || null },
       });
     }
 
@@ -72,13 +78,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     const { data: { user }, error: authError } = await supabase.auth.getUser(bearer);
     if (authError || !user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
-    const staff = await sql`SELECT role FROM community_admins WHERE user_id=${user.id}::uuid LIMIT 1`;
+    const staff = await sql`SELECT a.role,COALESCE(i.portal_status,'active') AS portal_status FROM community_admins a LEFT JOIN identities i ON i.user_id=a.user_id WHERE a.user_id=${user.id}::uuid LIMIT 1`;
+    if (staff[0]?.portal_status && staff[0].portal_status !== 'active') return res.status(403).json({error:'Your dashboard account is disabled or removed.'});
     const role = String(staff[0]?.role || '');
     if (!['owner','management','admin','moderator'].includes(role))
       return res.status(403).json({ error: 'Management access is required.' });
 
     if (action === 'staff_list') {
       const rows = await sql`SELECT a.user_id,a.role,
+          COALESCE(NULLIF(m.ign,''),NULLIF(ap.ign,'')) AS ign,
           COALESCE(NULLIF(p.display_name,''),NULLIF(m.display_name,''),initcap(a.role)||' Team') AS display_name,
           COALESCE(NULLIF(p.title,''),initcap(a.role)) AS title,
           COALESCE(p.bio,'') AS bio,
@@ -87,8 +95,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         FROM community_admins a
         LEFT JOIN community_management_profiles p ON p.user_id=a.user_id
         LEFT JOIN members m ON m.user_id=a.user_id
+        LEFT JOIN member_applications ap ON ap.id=a.user_id
+        LEFT JOIN identities i ON i.user_id=a.user_id
+        WHERE COALESCE(i.portal_status,'active')='active'
         ORDER BY CASE a.role WHEN 'owner' THEN 0 WHEN 'management' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,a.created_at LIMIT 100`;
       return res.json({ data: rows });
+    }
+    if (action === 'about_save') {
+      const headline = requireTitle(body.headline,120);
+      const description = str(body.description,1000);
+      const mission = str(body.mission,500);
+      const founder = str(body.founder,120) || 'To be announced';
+      const origin = str(body.origin,160);
+      const foundedOn = body.founded_on ? String(body.founded_on) : null;
+      if (foundedOn && !/^\d{4}-\d{2}-\d{2}$/.test(foundedOn))
+        return res.status(400).json({error:'Please provide a valid founding date.'});
+      const rows = await sql`INSERT INTO community_about(id,headline,description,mission,founder,origin,founded_on,updated_at)
+        VALUES(1,${headline},${description},${mission},${founder},${origin},${foundedOn}::date,now())
+        ON CONFLICT(id) DO UPDATE SET headline=EXCLUDED.headline,description=EXCLUDED.description,
+          mission=EXCLUDED.mission,founder=EXCLUDED.founder,origin=EXCLUDED.origin,
+          founded_on=EXCLUDED.founded_on,updated_at=now() RETURNING *`;
+      return res.json({data:rows[0]});
     }
     if (action === 'member') {
       if (!isUuid(body.id)) return res.status(400).json({ error: 'Invalid member.' });
