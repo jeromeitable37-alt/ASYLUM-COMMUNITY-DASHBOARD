@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
-  Activity, ArrowUpRight, CheckCircle2, ChevronRight, Crown, Fingerprint,
-  LockKeyhole, LogIn, Menu, Search, ShieldCheck, Swords, UserPlus, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Radio, Globe2,
+  Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
+  LockKeyhole, LogIn, Menu, Search, ShieldCheck, Swords, UserPlus, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2,
 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
