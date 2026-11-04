@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
+import CommunityShowcase from './CommunityShowcase';
 
 type Member = { id: string; user_id?: string | null; display_name: string; ign: string | null; uid: string | null; streamer_mode_id: string | null; team: string | null; role: string; photo_url: string | null };
 type Application = { id: string; display_name: string; ign: string; uid: string; streamer_mode_id: string | null; photo_url: string | null; status: 'pending' | 'approved' | 'rejected'; review_note: string | null; created_at: string };
@@ -289,16 +290,19 @@ function App() {
       <header className="topbar">
         <a className="brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>
           <img className="brand-logo" src="/resources/asylum-community-logo.jpg" alt="Asylum Community logo" onError={e => { e.currentTarget.style.display = 'none'; }} />
-          <span className="brand-copy"><strong>Asylum Community</strong><small>Official Dashboard</small></span>
+          <span className="brand-copy"><strong>Asylum Community</strong><small>Official Main Portal</small></span>
         </a>
         <nav className={mobileOpen ? 'nav-links open' : 'nav-links'}>
-          <button onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}>Official Members</button>
-          <a className="nav-network-link" href="https://asylum-community-recruitment-sigma.vercel.app/" target="_blank" rel="noopener noreferrer" onClick={() => setMobileOpen(false)}>Recruitment <ExternalLink size={13} /></a>
-          <a className="nav-network-link" href="https://asylum-jersey-nu.vercel.app/" target="_blank" rel="noopener noreferrer" onClick={() => setMobileOpen(false)}>Jersey Drop <ExternalLink size={13} /></a>
-          <button onClick={() => { setActiveTab('Management'); scrollTo('directory'); }}>Management</button>
+          <button onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}>Members</button>
+          <button onClick={() => scrollTo('teams')}>Teams</button>
+          <button onClick={() => scrollTo('management-showcase')}>Management</button>
+          <button onClick={() => scrollTo('achievements')}>Achievements</button>
+          <button onClick={() => scrollTo('gallery')}>Gallery</button>
+          <button onClick={() => scrollTo('recruitment-intro')}>Recruitment</button>
+          <button onClick={() => scrollTo('jersey-intro')}>Jerseys</button>
           {isAdmin && <button onClick={() => scrollTo('admin-panel')}>Admin panel</button>}
           <button className="nav-cta" onClick={() => { if (session) { setShowAuth(false); scrollTo('account'); } else { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); } }}>
-            {session ? 'My account' : 'Join Asylum'} <ArrowUpRight size={15} />
+            {session ? 'My account' : 'Member access'} <ArrowUpRight size={15} />
           </button>
         </nav>
         <button className="menu-toggle" aria-label="Toggle navigation" onClick={() => setMobileOpen(!mobileOpen)}>{mobileOpen ? <X /> : <Menu />}</button>
@@ -323,8 +327,8 @@ function App() {
 
         <section className="network-section section-wrap" id="community-network" aria-labelledby="network-title">
           <div className="network-heading">
-            <div><div className="section-kicker">01 / THE ASYLUM NETWORK</div><h2 id="network-title">Three ways to <span>belong.</span></h2><p>Everything in one place. Pick where you want to go—each experience opens its own official website.</p></div>
-            <div className="network-heading-mark"><Orbit size={22} /><span>ASYLUM NETWORK / 003</span></div>
+            <div><div className="section-kicker">01 / THE ASYLUM NETWORK</div><h2 id="network-title">Three ways to <span>belong.</span></h2><p>Discover each part of the community first. You can explore a section here before choosing to visit its official website.</p></div>
+            <div className="network-heading-mark"><Orbit size={22} /><span>ASYLUM UNIVERSE / 003</span></div>
           </div>
           <div className="network-grid">
             <button className="network-card network-card-home" type="button" onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}>
@@ -334,22 +338,22 @@ function App() {
               <span className="network-card-description">Verify community members by IGN, UID, or Streamer Mode ID. See management-approved profiles in the official directory.</span>
               <span className="network-card-action">View member directory <ArrowUpRight size={18} /></span>
             </button>
-            <a className="network-card network-card-recruitment" href="https://asylum-community-recruitment-sigma.vercel.app/" target="_blank" rel="noopener noreferrer">
+            <button className="network-card network-card-recruitment" type="button" onClick={() => scrollTo('recruitment-intro')}>
               <span className="network-card-top"><span className="network-index">02 / RECRUITMENT</span><span className="network-external"><ExternalLink size={15} /></span></span>
               <span className="network-card-icon"><Swords size={26} /></span>
               <span className="network-card-title">Join the <em>Squad</em></span>
               <span className="network-card-description">Apply to ASYLUM Community through Direct or Referral Application. Follow your recruitment steps on the dedicated site.</span>
-              <span className="network-card-action">Open recruitment <ArrowUpRight size={18} /></span>
-            </a>
-            <a className="network-card network-card-jersey" href="https://asylum-jersey-nu.vercel.app/" target="_blank" rel="noopener noreferrer">
+              <span className="network-card-action">Discover how to join <ArrowRight size={18} /></span>
+            </button>
+            <button className="network-card network-card-jersey" type="button" onClick={() => scrollTo('jersey-intro')}>
               <span className="network-card-top"><span className="network-index">03 / OFFICIAL MERCH</span><span className="network-external"><ExternalLink size={15} /></span></span>
               <span className="network-card-icon"><Shirt size={26} /></span>
               <span className="network-card-title">The Jersey <em>Drop</em></span>
               <span className="network-card-description">Explore the official ASYLUM jersey collection. Choose a design and continue to the existing order form.</span>
-              <span className="network-card-action">Explore jerseys <ArrowUpRight size={18} /></span>
-            </a>
+              <span className="network-card-action">Preview the designs <ArrowRight size={18} /></span>
+            </button>
           </div>
-          <div className="network-assurance"><Globe2 size={16} /><span>One official community. Three connected destinations. Recruitment applications and jersey orders stay on their own secure sites.</span></div>
+          <div className="network-assurance"><Globe2 size={16} /><span>One official community, three connected experiences. Preview the Recruitment and Jersey sections before choosing their dedicated sites.</span></div>
         </section>
 
         {notice && <div className={'site-notice ' + notice.kind} role="status">{notice.text}<button onClick={() => setNotice(null)} aria-label="Dismiss notice"><X size={16} /></button></div>}
@@ -395,9 +399,17 @@ function App() {
           <div className="directory-disclaimer"><LockKeyhole size={16} /><p>Only approved profiles are displayed here. Management controls member approvals and official directory records.</p></div>
         </section>
 
+        <CommunityShowcase
+          members={members}
+          isAdmin={isAdmin}
+          currentRole={currentRole}
+          currentUserId={session?.user.id ?? null}
+          onMemberUpdated={updated => setMembers(current => current.map(item => item.id === updated.id ? { ...item, ...updated } : item))}
+        />
+
         <section className="account-section section-wrap" id="account">
-          <div className="section-kicker">04 / MEMBER ACCESS</div><div className="account-layout">
-            <div className="section-intro"><h2>Your place in<br /><span>Asylum Community.</span></h2><p>Register with your IGN and UID, upload a profile picture, and wait for management approval before your profile appears publicly.</p><div className="notice"><ShieldCheck size={18} /><span>Your email and account details stay private. Only approved profile information appears in the directory.</span></div></div>
+          <div className="section-kicker">10 / MEMBER ACCESS</div><div className="account-layout">
+            <div className="section-intro"><h2>Your place in<br /><span>Asylum Community.</span></h2><p>Already part of ASYLUM? Register or sign in to manage your official member profile. New applicants can explore our Recruitment section above.</p><div className="notice"><ShieldCheck size={18} /><span>Your email and account details stay private. Only approved profile information appears in the directory.</span></div></div>
             <div className="account-card">
               {!session || showAuth ? <>
                 <div className="account-card-heading"><span className="account-icon">{authMode === 'signup' ? <UserPlus /> : <LogIn />}</span><div><h3>{authMode === 'signup' ? 'Apply for membership' : 'Welcome back'}</h3><p>{authMode === 'signup' ? 'Create an account for management review.' : 'Sign in to check your application.'}</p></div></div>
@@ -424,7 +436,7 @@ function App() {
         </section>
 
         {isAdmin && <section className="admin-section section-wrap" id="admin-panel">
-          <div className="directory-heading"><div><div className="section-kicker">05 / PRIVATE MANAGEMENT</div><h2>Membership <span>applications.</span></h2></div><div className="preview-label"><span /> ADMIN ACCESS</div></div>
+          <div className="directory-heading"><div><div className="section-kicker">11 / PRIVATE MANAGEMENT</div><h2>Membership <span>applications.</span></h2></div><div className="preview-label"><span /> ADMIN ACCESS</div></div>
           <p className="admin-intro">Approve an application to publish the member profile in the official directory. Rejected and pending applications stay out of the public roster.</p>
           <div className="application-list">
             {applications.filter(item => item.status === 'pending').map(item => <article className="application-card" key={item.id}>
