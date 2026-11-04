@@ -14,7 +14,7 @@ These remain **three separate sites**, connected with navigation links. This das
 
 ## Streamer Mode ID
 
-- New registrants can optionally submit their Streamer Mode ID (SMode ID) at signup.
+- New registrants must provide their Streamer Mode ID (SMode ID) at signup. Legacy member profiles without it can complete the ID from their signed-in profile; authorized management may also fill it in.
 - The public official member directory supports searching by IGN, UID, Streamer Mode ID, or team.
 - Authorized management and moderators can complete or correct the SMode ID of existing approved members using the **Add / Edit Streamer ID** control on the member card.
 - Updates go through authenticated `/api/dashboard?action=set_streamer_id` and are saved in Neon `members`, with the associated `member_applications` record updated as well.
