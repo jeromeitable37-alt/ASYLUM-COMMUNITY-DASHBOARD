@@ -58,6 +58,17 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState<'request' | 'verify' | null>(null);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryConfirm, setRecoveryConfirm] = useState('');
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [securityBusy, setSecurityBusy] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [securityNewPassword, setSecurityNewPassword] = useState('');
+  const [securityConfirm, setSecurityConfirm] = useState('');
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
   const [emailOtp, setEmailOtp] = useState('');
   const [verifyBusy, setVerifyBusy] = useState(false);
@@ -250,6 +261,85 @@ function App() {
     } catch (error) {
       setNotice({kind:'error',text:error instanceof Error ? error.message : 'Authentication failed. Please retry.'});
     } finally { setBusy(false); }
+  };
+
+  const beginPasswordRecovery = () => {
+    setAuthMode('signin');
+    setRecoveryMode('request');
+    setRecoveryEmail(email.trim());
+    setRecoveryCode(''); setRecoveryPassword(''); setRecoveryConfirm('');
+    setPassword('');
+    setNotice(null);
+  };
+
+  const requestPasswordResetCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (recoveryBusy) return;
+    const address = recoveryEmail.trim().toLowerCase();
+    if (!address.includes('@')) {
+      setNotice({kind:'error',text:'Enter your Neon Auth account email.'});
+      return;
+    }
+    setRecoveryBusy(true); setNotice(null);
+    try {
+      const result = await neonEmailAuth.emailOtp.requestPasswordReset({email:address});
+      if (result.error) throw new Error(result.error.message || 'Unable to request a password-reset code.');
+      setRecoveryEmail(address);
+      setRecoveryMode('verify');
+      setNotice({kind:'info',text:'If this email belongs to a Neon Auth account, a one-time reset code has been requested. Check Inbox and Spam. This cannot reset an old Supabase password.'});
+    } catch (error) {
+      // Never expose whether the address belongs to another user.
+      setNotice({kind:'error',text:error instanceof Error && /origin/i.test(error.message)
+        ? 'This Preview address must be authorized in Neon Auth. Contact management.'
+        : 'Unable to request a reset code right now. Check Neon email delivery and try again later.'});
+    } finally { setRecoveryBusy(false); }
+  };
+
+  const finishPasswordRecovery = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (recoveryBusy) return;
+    if (!/^\d{6,8}$/.test(recoveryCode.trim())) {
+      setNotice({kind:'error',text:'Enter the numeric reset code sent to your email.'});
+      return;
+    }
+    if (recoveryPassword.length < 8 || recoveryPassword !== recoveryConfirm) {
+      setNotice({kind:'error',text:'Use a password of at least 8 characters and confirm it correctly.'});
+      return;
+    }
+    setRecoveryBusy(true); setNotice(null);
+    try {
+      const result = await neonEmailAuth.emailOtp.resetPassword({
+        email:recoveryEmail.trim().toLowerCase(),otp:recoveryCode.trim(),password:recoveryPassword,
+      });
+      if (result.error) throw new Error(result.error.message || 'Reset code was invalid or expired.');
+      setRecoveryMode(null);
+      setEmail(recoveryEmail.trim().toLowerCase());
+      setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm('');
+      setNotice({kind:'success',text:'Your Neon Auth password has been changed. Sign in with the new password.'});
+    } catch (error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'The reset code could not be verified. Request a new code.'});
+    } finally {setRecoveryBusy(false);}
+  };
+
+  const updateMyPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (securityBusy) return;
+    if (securityNewPassword.length < 8 || securityNewPassword !== securityConfirm) {
+      setNotice({kind:'error',text:'Your new password must be at least 8 characters and match the confirmation.'});
+      return;
+    }
+    setSecurityBusy(true);setNotice(null);
+    try {
+      const result = await neonEmailAuth.changePassword({
+        currentPassword,newPassword:securityNewPassword,revokeOtherSessions:true,
+      });
+      if (result.error) throw new Error(result.error.message || 'Password change was not successful.');
+      setCurrentPassword('');setSecurityNewPassword('');setSecurityConfirm('');
+      setSecurityOpen(false);
+      setNotice({kind:'success',text:'Your Neon Auth password was updated. Other sessions were signed out.'});
+    } catch (error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to change your password.'});
+    } finally {setSecurityBusy(false);}
   };
 
   const resendConfirmation = async () => {
