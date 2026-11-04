@@ -3,7 +3,7 @@ import { neon } from '@neondatabase/serverless';
 import { randomUUID } from 'node:crypto';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { PortalAuthError, requirePortalIdentity } from './lib/neon-identity';
+import { PortalAuthError, requirePortalIdentity } from './lib/neon-identity.js';
 
 export default async function handler(req:VercelRequest,res:VercelResponse) {
   res.setHeader('Cache-Control','no-store');
