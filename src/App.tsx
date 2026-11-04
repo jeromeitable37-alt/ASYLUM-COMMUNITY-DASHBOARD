@@ -295,6 +295,7 @@ function App() {
           <button onClick={() => scrollTo('gallery')}>Gallery</button>
           <button onClick={() => scrollTo('recruitment-intro')}>Recruitment</button>
           <button onClick={() => scrollTo('jersey-intro')}>Jerseys</button>
+          {currentRole === 'owner' && <button onClick={() => scrollTo('user-management')}>Users</button>}
           {isAdmin && <button onClick={() => scrollTo('manage-community')}>Edit Website</button>}
           {isAdmin && <button onClick={() => scrollTo('admin-panel')}>Applications</button>}
           <button className="nav-cta" onClick={() => { if (session) { setShowAuth(false); scrollTo('account'); } else { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); } }}>
