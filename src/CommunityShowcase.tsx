@@ -6,7 +6,8 @@ import {
   Search, Shield, ShieldCheck, Shirt, Sparkles, Swords, Trash2, Trophy, Upload,
   Users, X,
 } from 'lucide-react';
-import { supabase } from './lib/supabase';
+import { portalAuth } from './lib/portal-auth';
+import { uploadPortalImage } from './lib/portal-images';
 import './community-showcase.css';
 
 export type PortalMember = {
@@ -68,7 +69,7 @@ function Initials({ name }: { name: string }) {
   return <span className="asy-photo-fallback" aria-hidden="true">{name.trim().split(/\s+/).slice(0, 2).map(x => x[0]).join('').toUpperCase() || 'ASY'}</span>;
 }
 async function showApi<T>(action: string, body?: Record<string, unknown>): Promise<T> {
-  const token = body ? (await supabase.auth.getSession()).data.session?.access_token : undefined;
+  const token = body ? (await portalAuth.getSession()).data.session?.access_token : undefined;
   const res = await fetch('/api/showcase?action=' + encodeURIComponent(action), {
     method: body ? 'POST' : 'GET',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
@@ -168,13 +169,9 @@ export default function CommunityShowcase({ members, isAdmin, currentRole, curre
 
   const uploadImage = async (file: File, setter: (url: string) => void) => {
     if (!currentUserId) throw new Error('You must be logged in to upload images.');
-    if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)
-      throw new Error('Select a JPG, PNG or WebP image up to 5 MB.');
-    const path = currentUserId + '/showcase/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-    const { error: uploadError } = await supabase.storage.from('community-photos').upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) throw new Error('Photo upload failed: ' + uploadError.message + '. You can also use an existing HTTPS photo URL.');
-    setter(supabase.storage.from('community-photos').getPublicUrl(path).data.publicUrl);
-    setStatus('Photo uploaded. Save this form to publish the change.');
+    const publicUrl = await uploadPortalImage(file, 'showcase');
+    setter(publicUrl);
+    setStatus('Photo uploaded to Neon Object Storage. Save this form to publish.');
   };
   const handleUpload = async (file: File | undefined, setter: (url: string) => void) => {
     if (!file) return;
