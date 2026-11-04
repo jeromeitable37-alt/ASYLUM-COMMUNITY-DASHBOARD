@@ -382,7 +382,7 @@ function App() {
     finally { setBusy(false); }
   };
 
-  const signOut = async () => { await portalAuth.signOut(); setNotice({ kind: 'info', text: 'You have signed out.' }); setShowAuth(false); };
+  const signOut = async () => { await portalAuth.signOut(); setSession(null); setNotice({ kind: 'info', text: 'You have signed out of Neon Auth.' }); setShowAuth(false); };
 
   return (
     <div className="site-shell">
@@ -547,13 +547,21 @@ function App() {
                 <div className="auth-overline"><Sparkles size={13} /> SECURE ASYLUM ACCESS / 2026</div>
                 <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
                 <div className="auth-switch"><button type="button" className={authMode === 'signup' ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setNotice(null); }}>Register</button><button type="button" className={authMode === 'signin' ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setNotice(null); }}>Sign in</button></div>
-                {authMode === 'signup' && confirmationEmail && <div className="asy-confirm-email" role="status">
-                  <div className="asy-confirm-title"><CheckCircle2 size={18} /> Verify your email before management review</div>
-                  <p>We received your signup for <strong>{confirmationEmail}</strong>. Your application will be added after you confirm your email and sign in.</p>
-                  <p>Check your Inbox, Spam, or Promotions for a Supabase confirmation message. <strong>Don't register again.</strong></p>
+                {confirmationEmail && <div className="asy-confirm-email" role="status">
+                  <div className="asy-confirm-title"><CheckCircle2 size={18} /> Neon Auth — verify your email</div>
+                  <p>Check the email sent to <strong>{confirmationEmail}</strong> for your one-time verification code. Your membership is <strong>not</strong> submitted until your email is verified and your profile is completed.</p>
+                  <form onSubmit={confirmVerification} className="asy-neon-otp-form">
+                    <label htmlFor="neon-email-code">EMAIL VERIFICATION CODE</label>
+                    <input id="neon-email-code" type="text" inputMode="numeric" pattern="[0-9]{6,8}"
+                      required minLength={6} maxLength={8} autoComplete="one-time-code" placeholder="6-digit code"
+                      value={emailOtp} onChange={e=>setEmailOtp(e.target.value.replace(/[^0-9]/g,''))}/>
+                    <button className="button-primary form-submit" type="submit" disabled={verifyBusy}>
+                      {verifyBusy ? 'Verifying…' : 'Verify Neon email'} <ArrowRight size={16} />
+                    </button>
+                  </form>
                   <div className="asy-confirm-actions">
-                    <button type="button" disabled={resendBusy} onClick={() => void resendConfirmation()}>{resendBusy ? 'Sending…' : 'Resend confirmation email'}</button>
-                    <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>I've confirmed — Sign in</button>
+                    <button type="button" disabled={resendBusy} onClick={() => void resendConfirmation()}>{resendBusy ? 'Sending…' : 'Resend code'}</button>
+                    <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Already verified? Sign in</button>
                   </div>
                 </div>}
                 <form className="member-form" onSubmit={submitAuth}>
@@ -574,7 +582,22 @@ function App() {
                 </form><p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
               </> : <div className="signed-in-panel">
                 <span className="account-icon"><CheckCircle2 /></span><h3>You’re signed in</h3><p>{session.user.email}</p>
-                {!application?.streamer_mode_id && <form className="asy-complete-streamer-form" onSubmit={saveOwnStreamerId}>
+                {!application && <form className="asy-complete-streamer-form" onSubmit={completeApplication}>
+                  <div className="asy-complete-streamer-label"><Fingerprint size={17}/> Complete your ASYLUM registration</div>
+                  <p>You're signed in with Neon Auth. Fill in the required community details to submit your application for management review. Existing approved memberships remain linked after verified account migration.</p>
+                  <label htmlFor="missing-full-name">FULL NAME</label>
+                  <input id="missing-full-name" required minLength={2} maxLength={60} value={missingFullName} onChange={e=>setMissingFullName(e.target.value)} placeholder="Your full name"/>
+                  <label htmlFor="missing-ign">IN-GAME NAME (IGN)</label>
+                  <input id="missing-ign" required minLength={2} maxLength={40} value={missingIgn} onChange={e=>setMissingIgn(e.target.value)} placeholder="Your CODM IGN"/>
+                  <label htmlFor="missing-uid">PLAYER UID</label>
+                  <input id="missing-uid" required minLength={3} maxLength={40} value={missingUid} onChange={e=>setMissingUid(e.target.value)} placeholder="Your game UID"/>
+                  <label htmlFor="missing-streamer">STREAMER MODE ID — REQUIRED</label>
+                  <input id="missing-streamer" required maxLength={100} value={missingStreamer} onChange={e=>setMissingStreamer(e.target.value)} placeholder="Your actual Streamer Mode ID"/>
+                  <button type="submit" className="button-primary form-submit" disabled={busy}>
+                    <Save size={16}/>{busy ? 'Saving…' : 'Submit Official Application'}
+                  </button>
+                </form>}
+                {application && !application.streamer_mode_id && <form className="asy-complete-streamer-form" onSubmit={saveOwnStreamerId}>
                   <div className="asy-complete-streamer-label"><Fingerprint size={17} /> Complete your required Streamer Mode ID</div>
                   <p>{application
                     ? 'Your existing membership profile is missing this field. Add it below without creating another account.'
@@ -588,6 +611,8 @@ function App() {
                   </button>
                 </form>}
                 {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : <><p>No member application is linked to this account yet. If you signed up before registration was enabled, contact management.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></>}
+
+                {session && <p className="asy-neon-privacy-note">Neon Auth manages account security for this Dashboard. Recruitment and Jersey accounts are separate.</p>}
                 <button className="button-primary form-submit" onClick={() => void signOut()}>Sign out <ArrowUpRight size={17} /></button>{isAdmin && <button className="button-quiet" onClick={() => scrollTo('admin-panel')}>Open management panel</button>}
               </div>}
             </div>
