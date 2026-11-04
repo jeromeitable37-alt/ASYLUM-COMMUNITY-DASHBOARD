@@ -461,7 +461,7 @@ function App() {
               {isAdmin && <div className="streamer-editor">
                 {editingStreamerFor === member.id ? <div className="streamer-editor-form">
                   <label htmlFor={'streamer-' + member.id}>STREAMER MODE ID</label>
-                  <input id={'streamer-' + member.id} type="text" maxLength={100} value={streamerDraft} onChange={e => setStreamerDraft(e.target.value)} placeholder="Leave blank if not applicable" />
+                  <input id={'streamer-' + member.id} type="text" required maxLength={100} value={streamerDraft} onChange={e => setStreamerDraft(e.target.value)} placeholder="Enter the member's required Streamer Mode ID" />
                   <div className="streamer-editor-actions">
                     <button className="approve-button" type="button" disabled={busy} onClick={() => void saveStreamerModeId(member)}><Save size={14} /> Save ID</button>
                     <button className="button-quiet" type="button" disabled={busy} onClick={() => setEditingStreamerFor(null)}>Cancel</button>
