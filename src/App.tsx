@@ -7,6 +7,7 @@ import {
 import { portalAuth, neonEmailAuth, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
 import type { PortalSession } from './lib/portal-auth';
 import { uploadPortalImage } from './lib/portal-images';
+import { readApiEnvelope } from './lib/read-api';
 import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
@@ -33,9 +34,8 @@ async function dashboard<T>(action: string, opts?: { body?: Record<string, unkno
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts?.body ? { 'Content-Type': 'application/json' } : {}) },
     ...(opts?.body ? { body: JSON.stringify(opts.body) } : {}),
   });
-  const output = await res.json();
-  if (!res.ok) throw new Error(output.error || 'Server request failed.');
-  return output.data as T;
+  const output = await readApiEnvelope<T>(res);
+  return output.data;
 }
 
 function App() {
