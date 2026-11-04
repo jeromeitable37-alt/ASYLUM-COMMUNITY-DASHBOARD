@@ -45,3 +45,57 @@ CREATE INDEX IF NOT EXISTS idx_members_created_at ON members(created_at DESC);
 -- Safe upgrade for databases created before Streamer Mode ID was added.
 ALTER TABLE members ADD COLUMN IF NOT EXISTS streamer_mode_id text;
 ALTER TABLE member_applications ADD COLUMN IF NOT EXISTS streamer_mode_id text;
+
+
+-- Official community portal content; editable only through authenticated staff APIs.
+CREATE TABLE IF NOT EXISTS community_teams (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE CHECK (char_length(trim(name)) BETWEEN 2 AND 80),
+  description text NOT NULL DEFAULT '',
+  logo_url text,
+  captain_member_id uuid REFERENCES members(id) ON DELETE SET NULL,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS community_team_members (
+  team_id uuid NOT NULL REFERENCES community_teams(id) ON DELETE CASCADE,
+  member_id uuid NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  joined_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (team_id,member_id)
+);
+CREATE TABLE IF NOT EXISTS community_achievements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title text NOT NULL CHECK (char_length(trim(title)) BETWEEN 2 AND 120),
+  subtitle text NOT NULL DEFAULT '',
+  details text NOT NULL DEFAULT '',
+  badge text NOT NULL DEFAULT 'ACHIEVEMENT',
+  image_url text,
+  achieved_on date,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS community_gallery (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title text NOT NULL CHECK (char_length(trim(title)) BETWEEN 2 AND 120),
+  caption text NOT NULL DEFAULT '',
+  category text NOT NULL DEFAULT 'COMMUNITY',
+  image_url text NOT NULL CHECK (image_url ~ '^https://'),
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS community_management_profiles (
+  user_id uuid PRIMARY KEY REFERENCES community_admins(user_id) ON DELETE CASCADE,
+  display_name text NOT NULL DEFAULT '',
+  title text NOT NULL DEFAULT '',
+  bio text NOT NULL DEFAULT '',
+  photo_url text,
+  sort_order integer NOT NULL DEFAULT 0,
+  show_public boolean NOT NULL DEFAULT true,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_team_members_member ON community_team_members(member_id);
+CREATE INDEX IF NOT EXISTS idx_achievements_order ON community_achievements(sort_order,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gallery_order ON community_gallery(sort_order,created_at DESC);
