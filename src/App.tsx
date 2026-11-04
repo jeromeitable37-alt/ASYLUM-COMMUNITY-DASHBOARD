@@ -286,7 +286,7 @@ function App() {
 
   return (
     <div className="site-shell">
-      <div className="announcement"><span className="pulse-dot" /> ASYLUM COMMUNITY OFFICIAL DASHBOARD <span className="announcement-right">MAIN PORTAL  /  MEMBERS  /  RECRUITMENT  /  JERSEYS</span></div>
+      <div className="announcement"><span className="pulse-dot" /> ASYLUM COMMUNITY / OFFICIAL MAIN PORTAL <span className="announcement-right">MAIN PORTAL  /  MEMBERS  /  RECRUITMENT  /  JERSEYS</span></div>
       <header className="topbar">
         <a className="brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>
           <img className="brand-logo" src="/resources/asylum-community-logo.jpg" alt="Asylum Community logo" onError={e => { e.currentTarget.style.display = 'none'; }} />
