@@ -10,6 +10,8 @@ import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
 import './auth-cyber.css';
+import './hero-motion.css';
+import CinematicMedia from './CinematicMedia';
 
 type Member = { id: string; user_id?: string | null; display_name: string; ign: string | null; uid: string | null; streamer_mode_id: string | null; team: string | null; role: string; photo_url: string | null };
 type Application = { id: string; display_name: string; ign: string; uid: string; streamer_mode_id: string | null; photo_url: string | null; status: 'pending' | 'approved' | 'rejected'; review_note: string | null; created_at: string };
@@ -40,6 +42,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('Members');
   const [query, setQuery] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoBoost, setLogoBoost] = useState(false);
   const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signup');
   const [showAuth, setShowAuth] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -290,6 +293,7 @@ function App() {
           <button onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}>Members</button>
           <button onClick={() => scrollTo('teams')}>Teams</button>
           <button onClick={() => scrollTo('about-asylum')}>About</button>
+          <button onClick={() => scrollTo('cinematic')}>CODM Cinema</button>
           <button onClick={() => scrollTo('management-showcase')}>Management</button>
           <button onClick={() => scrollTo('achievements')}>Achievements</button>
           <button onClick={() => scrollTo('gallery')}>Gallery</button>
@@ -317,7 +321,30 @@ function App() {
             </div>
             <div className="hero-proof"><span><CheckCircle2 size={15} /> {members.length} approved member profiles</span><span><Fingerprint size={15} /> IGN / UID / SMode lookup</span><span><LockKeyhole size={15} /> Management verified</span></div>
           </div>
-          <div className="hero-emblem" aria-label="Asylum Community emblem"><div className="emblem-halo" /><img src="/resources/asylum-community-logo.jpg" alt="Asylum Community red emblem" /><div className="emblem-caption"><span className="caption-dot" /> ASYLUM COMMUNITY <span className="caption-rule" /></div></div>
+          <button className={'hero-emblem' + (logoBoost ? ' is-boosted' : '')} type="button"
+            aria-label="Toggle the Asylum Community logo energy effect" aria-pressed={logoBoost}
+            onClick={() => setLogoBoost(value => !value)}
+            onPointerMove={event => {
+              if (event.pointerType !== 'mouse' && event.pointerType !== 'pen') return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const x = (event.clientX - rect.left) / rect.width - 0.5;
+              const y = (event.clientY - rect.top) / rect.height - 0.5;
+              event.currentTarget.style.setProperty('--hero-tilt-y', (x * 13).toFixed(2) + 'deg');
+              event.currentTarget.style.setProperty('--hero-tilt-x', (-y * 10).toFixed(2) + 'deg');
+            }}
+            onPointerLeave={event => {
+              event.currentTarget.style.setProperty('--hero-tilt-y', '0deg');
+              event.currentTarget.style.setProperty('--hero-tilt-x', '0deg');
+            }}>
+            <span className="emblem-orbit" aria-hidden="true" />
+            <span className="emblem-orbit emblem-orbit-two" aria-hidden="true" />
+            <span className="emblem-orbit emblem-orbit-three" aria-hidden="true" />
+            <span className="emblem-halo" aria-hidden="true" />
+            <span className="emblem-core"><img src="/resources/asylum-community-logo.jpg" alt="Asylum Community red emblem" /></span>
+            <span className="emblem-scanline" aria-hidden="true" />
+            <span className="emblem-caption"><span className="caption-dot" /> ASYLUM COMMUNITY <span className="caption-rule" /></span>
+            <span className="emblem-boost-hint">{logoBoost ? 'CORE BOOST / ACTIVE · CLICK TO RESET' : 'INTERACTIVE EMBLEM · CLICK TO CHARGE'}</span>
+          </button>
           <div className="hero-bottom"><span>BUILT FOR THE COMMUNITY</span><span>MEMBERS • RECRUITMENT • JERSEY DROP</span><span>SCROLL TO EXPLORE ↓</span></div>
         </section>
 
@@ -352,6 +379,8 @@ function App() {
           </div>
           <div className="network-assurance"><Globe2 size={16} /><span>One official community, three connected experiences. Preview the Recruitment and Jersey sections before choosing their dedicated sites.</span></div>
         </section>
+
+        <CinematicMedia />
 
         <AboutAsylum isAdmin={isAdmin} />
 
