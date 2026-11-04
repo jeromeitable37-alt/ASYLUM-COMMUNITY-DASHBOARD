@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowRight, CalendarDays, CheckCircle2, Compass, Crown, Edit3, Flag, Save, ShieldCheck, Sparkles, X } from 'lucide-react';
-import { supabase } from './lib/supabase';
+import { portalAuth } from './lib/portal-auth';
 import './portal-upgrade.css';
 
 type About = {
@@ -37,7 +37,7 @@ export default function AboutAsylum({ isAdmin }: {isAdmin: boolean}) {
   async function save(event:FormEvent<HTMLFormElement>){
     event.preventDefault(); setSaving(true);setNotice('');
     try {
-      const { data: {session} }=await supabase.auth.getSession();
+      const { data: {session} }=await portalAuth.getSession();
       if(!session)throw new Error('Sign in as management first.');
       const r=await fetch('/api/showcase?action=about_save',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify(draft)});
       const response=await r.json();
