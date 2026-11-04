@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { randomUUID } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 import { createClient } from '@supabase/supabase-js';
 
@@ -121,14 +122,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const memberIds: string[] = Array.isArray(body.member_ids) ? [...new Set(body.member_ids)] : [];
       if (memberIds.length > 100 || memberIds.some(x=>!isUuid(x))) return res.status(400).json({ error: 'Invalid team member list.' });
       if (captain && !memberIds.includes(captain)) memberIds.push(captain);
-      const saved = await sql`INSERT INTO community_teams (id,name,description,logo_url,captain_member_id,updated_at)
-        VALUES (COALESCE(${id}::uuid,gen_random_uuid()),${name},${description},${logo},${captain}::uuid,now())
-        ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,
-          logo_url=EXCLUDED.logo_url,captain_member_id=EXCLUDED.captain_member_id,updated_at=now()
-        RETURNING id`;
-      const teamId = saved[0].id as string;
-      // Both roster changes run in one atomic Neon HTTP transaction.
+      const teamId = id || randomUUID();
+      // Team metadata and its roster are committed together or rolled back together.
       await sql.transaction([
+        sql`INSERT INTO community_teams (id,name,description,logo_url,captain_member_id,updated_at)
+          VALUES (${teamId}::uuid,${name},${description},${logo},${captain}::uuid,now())
+          ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,
+            logo_url=EXCLUDED.logo_url,captain_member_id=EXCLUDED.captain_member_id,updated_at=now()`,
         sql`DELETE FROM community_team_members WHERE team_id=${teamId}::uuid`,
         sql`INSERT INTO community_team_members (team_id,member_id)
             SELECT ${teamId}::uuid,m.id FROM jsonb_array_elements_text(${JSON.stringify(memberIds)}::jsonb) ids(id)
