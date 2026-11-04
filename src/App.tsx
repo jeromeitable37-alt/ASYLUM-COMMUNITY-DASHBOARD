@@ -233,6 +233,18 @@ function App() {
             throw profileError;
           }
         }
+        try {
+          await dashboard('profile', {token: current.access_token});
+        } catch (profileError) {
+          const message = profileError instanceof Error ? profileError.message : 'Dashboard identity is not ready.';
+          if (/verify your Neon Auth email/i.test(message)) {
+            setConfirmationEmail(normalizedEmail);
+            setShowAuth(true);
+          } else if (/Owner-approved Neon Auth migration link/i.test(message)) {
+            setShowAuth(true);
+          }
+          throw new Error(message);
+        }
         setNotice({kind:'success',text:'Signed in with Neon Auth. Your application is connected to the Official Dashboard.'});
       }
     } catch (error) {
