@@ -1267,3 +1267,41 @@ h2 span {
   .network-card,.network-card:after,.network-card-action svg,.button-primary,.button-quiet{transition:none}
   .network-card:hover{transform:none}
 }
+
+
+/* OFFICIAL MEMBER PASSPORTS + expanded main-portal navigation */
+.member-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,335px),1fr));gap:17px}
+.member-card{position:relative;overflow:hidden;border:1px solid #57323d;border-radius:13px;padding:25px;background:radial-gradient(ellipse at 100% 0%,rgba(206,38,59,.17),transparent 48%),linear-gradient(142deg,#24141b,#120e13 65%);box-shadow:0 18px 40px #0002}
+.member-card:before{content:'ASYLUM / OFFICIAL MEMBER';position:absolute;pointer-events:none;bottom:-2px;right:-4px;font:800 clamp(27px,4vw,45px)/1 'Space Grotesk',sans-serif;letter-spacing:-.07em;color:#ef3d5010;transform:rotate(-8deg)}
+.member-card:after{content:'';position:absolute;pointer-events:none;height:3px;inset:0 0 auto;background:linear-gradient(90deg,#f44356,transparent 75%);opacity:.8}
+.member-card:hover{transform:translateY(-5px);border-color:#a44b5b;box-shadow:0 23px 50px #0005}
+.member-card .card-topline{align-items:flex-start}
+.member-card .member-avatar{width:80px;height:80px;border-radius:11px;border:1px solid #a85263;object-fit:cover;object-position:center top;box-shadow:0 8px 25px #0006}
+.member-card .member-icon{width:80px;height:80px;border:1px solid #62303d;border-radius:10px;background:radial-gradient(circle,#4d1c2d,#28151e);color:#f25b6d}
+.member-card .status-pill{flex:none;border-color:#4d8c617a;background:#16261cc9;color:#b3ebc4;font-size:9px;border-radius:100px;padding:7px 10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800}
+.member-card .status-pill span{background:#69ce8b;box-shadow:0 0 10px #69ce8b}
+.member-card h3{font-size:clamp(22px,2.5vw,29px);letter-spacing:-.04em;margin-top:22px;margin-bottom:8px;overflow-wrap:anywhere}
+.member-card .member-uid{font-size:11px;letter-spacing:.04em;color:#c6aeb8;overflow-wrap:anywhere}
+.member-card .member-details{position:relative;font-size:11px;padding:3px 0}
+.member-card .member-details span{font-size:9px;color:#ae94a1;font-weight:800;letter-spacing:.08em}
+.member-card .member-details strong{max-width:65%;overflow-wrap:anywhere}
+.member-card .member-foot{position:relative;margin-top:24px}
+.member-card .member-divider{background:#543442}
+.directory-section{background:radial-gradient(ellipse at 90% 0%,#54162417,transparent 45%),#0b090c}
+.directory-heading h2{font-size:clamp(37px,5vw,56px);letter-spacing:-.06em}
+@media(max-width:1250px){
+  .topbar{padding-inline:4.7%;height:76px}
+  .menu-toggle{display:grid;place-items:center;width:43px;height:43px;border:1px solid #633541;border-radius:8px;color:white;background:#26141c}
+  .nav-links{display:none;position:absolute;top:100%;left:0;right:0;width:100%;padding:12px 5% 20px;align-items:stretch;flex-direction:column;gap:2px;background:#110d11;border-bottom:1px solid #64303e;box-shadow:0 24px 44px #000a;max-height:calc(100dvh - 90px);overflow-y:auto}
+  .nav-links.open{display:flex}
+  .nav-links button{min-height:43px;padding:10px 14px;text-align:left;justify-content:flex-start;font-size:13px}
+  .nav-links .nav-cta{justify-content:center;margin-top:6px}
+}
+@media(max-width:650px){
+  .member-grid{grid-template-columns:1fr}
+  .member-card{padding:20px}
+  .member-card .member-avatar,.member-card .member-icon{width:68px;height:68px}
+  .member-card .status-pill{font-size:8px;white-space:normal;text-align:center}
+  .menu-toggle{height:38px;width:38px}
+  .nav-links{top:100%;left:0;right:0}
+}
