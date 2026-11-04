@@ -83,7 +83,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                COALESCE(NULLIF(m.ign,''),NULLIF(ap.ign,'')) AS ign,
                COALESCE(m.photo_url,ap.photo_url) AS photo_url,
                COALESCE(a.role,'member') AS role,
-               ap.status AS application_status
+               ap.status AS application_status,
+               (m.id IS NOT NULL) AS has_member_profile,
+               (ap.id IS NOT NULL) AS has_application
         FROM identities i
         LEFT JOIN members m ON m.user_id=i.user_id
         LEFT JOIN member_applications ap ON ap.id=i.user_id
