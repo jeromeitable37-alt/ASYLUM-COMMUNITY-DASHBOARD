@@ -22,3 +22,33 @@
 .cyber-account-card .privacy-note{font-size:10px;line-height:1.7;color:#aa91a0}.owner-tools{background:transparent;border:0;padding:0;margin-top:26px}.owner-tools>.owner-form.transfer-form{max-width:640px;margin-top:26px;background:linear-gradient(145deg,#1b121a,#100d13);border:1px solid #70404f;border-radius:13px;padding:20px}.owner-tools .transfer-form button{max-width:100%}
 @media(max-width:760px){.cyber-account-card{padding:19px}.cyber-account-card .account-card-heading{gap:11px}.auth-floating-field input{min-width:0}.owner-tools>.owner-form.transfer-form{padding:16px}}
 @media(prefers-reduced-motion:reduce){.cyber-account-card:before,.cyber-account-card:after,.auth-mood-particles span,.cyber-account-card .auth-neon-submit{animation:none}.auth-floating-field input,.auth-floating-field label,.auth-password-toggle,.cyber-account-card,.cyber-account-card .auth-switch button{transition:none}.auth-error-inline{animation:none}}
+
+/* Clear signup verification step; avoid encouraging duplicate registrations. */
+.asy-confirm-email{
+  position:relative;
+  margin:15px 0 20px;
+  padding:18px;
+  border:1px solid rgba(255,170,105,.5);
+  border-radius:12px;
+  background:linear-gradient(133deg,rgba(75,42,24,.55),rgba(25,19,25,.86));
+  box-shadow:0 12px 26px rgba(0,0,0,.17);
+  color:#f8e5dd;
+}
+.asy-confirm-title{
+  display:flex;align-items:center;gap:9px;font-weight:800;font-size:14px;color:#ffddae;
+}
+.asy-confirm-title svg{color:#ffc27c;flex-shrink:0}
+.asy-confirm-email p{font-size:12px;line-height:1.75;margin:10px 0;color:#ded0d1;overflow-wrap:anywhere}
+.asy-confirm-email strong{color:#fff1e6}
+.asy-confirm-actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:15px}
+.asy-confirm-actions button{
+  border:1px solid #965c53;padding:11px 13px;border-radius:8px;
+  color:#fff4e6;background:#40242b;cursor:pointer;font-weight:750;font-size:11px;
+  min-height:42px;transition:background .2s ease,border-color .2s ease;
+}
+.asy-confirm-actions button:first-child{background:#ad4a42;border-color:#cc716b}
+.asy-confirm-actions button:hover{background:#66323b;border-color:#fca19a}
+.asy-confirm-actions button:disabled{opacity:.5;cursor:wait}
+.asy-confirm-actions button:focus-visible{outline:2px solid #f8b5a6;outline-offset:3px}
+@media(max-width:530px){.asy-confirm-email{padding:14px}.asy-confirm-actions{flex-direction:column;align-items:stretch}.asy-confirm-actions button{width:100%}}
+@media(prefers-reduced-motion:reduce){.asy-confirm-actions button{transition:none}}
