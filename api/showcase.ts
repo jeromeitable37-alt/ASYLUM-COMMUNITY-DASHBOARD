@@ -76,6 +76,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!['owner','management','admin','moderator'].includes(role))
       return res.status(403).json({ error: 'Management access is required.' });
 
+    if (action === 'staff_list') {
+      const rows = await sql`SELECT a.user_id,a.role,
+          COALESCE(NULLIF(p.display_name,''),NULLIF(m.display_name,''),initcap(a.role)||' Team') AS display_name,
+          COALESCE(NULLIF(p.title,''),initcap(a.role)) AS title,
+          COALESCE(p.bio,'') AS bio,
+          COALESCE(NULLIF(p.photo_url,''),a.photo_url,m.photo_url) AS photo_url,
+          COALESCE(p.show_public,true) AS show_public
+        FROM community_admins a
+        LEFT JOIN community_management_profiles p ON p.user_id=a.user_id
+        LEFT JOIN members m ON m.user_id=a.user_id
+        ORDER BY CASE a.role WHEN 'owner' THEN 0 WHEN 'management' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END,a.created_at LIMIT 100`;
+      return res.json({ data: rows });
+    }
     if (action === 'member') {
       if (!isUuid(body.id)) return res.status(400).json({ error: 'Invalid member.' });
       const displayName = requireTitle(body.display_name,60);
@@ -119,7 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sql`DELETE FROM community_team_members WHERE team_id=${teamId}::uuid`,
         sql`INSERT INTO community_team_members (team_id,member_id)
             SELECT ${teamId}::uuid,m.id FROM jsonb_array_elements_text(${JSON.stringify(memberIds)}::jsonb) ids(id)
-            JOIN members m ON m.id=ids.id::uuid ON CONFLICT DO NOTHING`,
+            JOIN members m ON m.id=ids.id::uuid WHERE true ON CONFLICT DO NOTHING`,
       ]);
       return res.json({ data: { id: teamId } });
     }
