@@ -12,6 +12,7 @@ import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
 import './auth-cyber.css';
+import './neon-recovery.css';
 import './hero-motion.css';
 import CinematicMedia from './CinematicMedia';
 
