@@ -146,18 +146,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!target.length) return res.status(404).json({error:'Registered account not found.'});
       if (target[0].existing_role==='owner') return res.status(403).json({error:'Owner role cannot be changed here.'});
       if (target[0].portal_status!=='active') return res.status(409).json({error:'Restore this account before changing its role.'});
+      // One atomic Neon SQL statement per role change, including the audit event.
+      let changed;
       if (newRole==='member') {
-        await sql.transaction([
-          sql`DELETE FROM community_admins WHERE user_id=${payload.user_id}::uuid AND role<>'owner'`,
-          sql`INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details) VALUES (${userId}::uuid,${payload.user_id}::uuid,'role_change',jsonb_build_object('from',${String(target[0].existing_role||'member')},'to',${newRole}))`
-        ]);
+        changed = await sql`WITH eligible AS (
+          SELECT i.user_id,COALESCE(a.role,'member') AS previous_role
+          FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id
+          WHERE i.user_id=${payload.user_id}::uuid AND i.portal_status='active'
+            AND a.role IS DISTINCT FROM 'owner'
+        ), demoted AS (
+          DELETE FROM community_admins WHERE user_id IN
+            (SELECT user_id FROM eligible WHERE previous_role<>'member') AND role<>'owner'
+          RETURNING user_id
+        ), audited AS (
+          INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details)
+          SELECT ${userId}::uuid,d.user_id,'role_change',
+            jsonb_build_object('from',e.previous_role,'to','member')
+          FROM demoted d JOIN eligible e ON e.user_id=d.user_id
+          RETURNING id
+        ) SELECT d.user_id,'member' AS role FROM demoted d WHERE EXISTS(SELECT 1 FROM audited)`;
       } else {
-        await sql.transaction([
-          sql`INSERT INTO community_admins(user_id,role) VALUES (${payload.user_id}::uuid,${newRole}) ON CONFLICT(user_id) DO UPDATE SET role=EXCLUDED.role WHERE community_admins.role<>'owner'`,
-          sql`INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details) VALUES (${userId}::uuid,${payload.user_id}::uuid,'role_change',jsonb_build_object('from',${String(target[0].existing_role||'member')},'to',${newRole}))`
-        ]);
+        changed = await sql`WITH eligible AS (
+          SELECT i.user_id,COALESCE(a.role,'member') AS previous_role
+          FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id
+          WHERE i.user_id=${payload.user_id}::uuid AND i.portal_status='active'
+            AND a.role IS DISTINCT FROM 'owner'
+        ), promoted AS (
+          INSERT INTO community_admins(user_id,role)
+          SELECT user_id,${newRole} FROM eligible WHERE previous_role<>${newRole}
+          ON CONFLICT(user_id) DO UPDATE SET role=EXCLUDED.role WHERE community_admins.role<>'owner'
+          RETURNING user_id,role
+        ), audited AS (
+          INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details)
+          SELECT ${userId}::uuid,p.user_id,'role_change',
+            jsonb_build_object('from',e.previous_role,'to',p.role)
+          FROM promoted p JOIN eligible e ON e.user_id=p.user_id
+          RETURNING id
+        ) SELECT p.user_id,p.role FROM promoted p WHERE EXISTS(SELECT 1 FROM audited)`;
       }
-      return res.json({data:{user_id:payload.user_id,role:newRole}});
+      if (!changed.length) return res.status(409).json({
+        error: 'Role is already set, this account is inactive, or it has a protected role. Refresh the users list.'
+      });
+      return res.json({data:changed[0]});
     }
     if (req.method === 'POST' && action === 'user_status') {
       if (!owner) return res.status(403).json({error:'Owner access required.'});
