@@ -123,11 +123,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const existing = await sql`SELECT i.portal_status,a.role FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id WHERE i.user_id=${payload.user_id}::uuid LIMIT 1`;
       if (!existing.length) return res.status(404).json({error:'Account not found.'});
       if (existing[0].role==='owner') return res.status(403).json({error:'Owner account is protected.'});
-      await sql.transaction([
-        sql`UPDATE identities SET portal_status=${nextStatus},portal_status_updated_at=now() WHERE user_id=${payload.user_id}::uuid`,
-        sql`INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details) VALUES (${userId}::uuid,${payload.user_id}::uuid,'portal_status_change',jsonb_build_object('from',${String(existing[0].portal_status)},'to',${nextStatus}))`,
-      ]);
-      return res.json({data:{user_id:payload.user_id,portal_status:nextStatus}});
+      // One atomic SQL statement: update and audit must always succeed or fail together.
+      const changed = await sql`
+        WITH updated AS (
+          UPDATE identities
+          SET portal_status=${nextStatus},portal_status_updated_at=now()
+          WHERE user_id=${payload.user_id}::uuid AND portal_status=${String(existing[0].portal_status)}
+          RETURNING user_id,portal_status
+        ), audited AS (
+          INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details)
+          SELECT ${userId}::uuid,u.user_id,'portal_status_change',
+                 jsonb_build_object('from',${String(existing[0].portal_status)},'to',u.portal_status)
+          FROM updated u
+          RETURNING id
+        )
+        SELECT u.user_id,u.portal_status FROM updated u WHERE EXISTS(SELECT 1 FROM audited)
+      `;
+      if (!changed.length) return res.status(409).json({error:'Account status changed while you were editing. Refresh the list and try again.'});
+      return res.json({data:changed[0]});
     }
     if (req.method === 'POST' && action === 'set_streamer_id') {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
