@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, RefreshCw, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import './user-management.css';
 
 export type PortalUser = {
   user_id: string;
