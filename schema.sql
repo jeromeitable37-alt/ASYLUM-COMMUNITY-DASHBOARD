@@ -134,3 +134,85 @@ CREATE TABLE IF NOT EXISTS community_about (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO community_about (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+
+-- Owner-only Neon account controls: atomic role/status updates with audit.
+
+CREATE FUNCTION public.portal_change_role(p_actor uuid,p_target uuid,p_new_role text)
+RETURNS TABLE(user_id uuid,role text)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path=public
+AS $fn$
+DECLARE previous_role text;
+DECLARE target_status text;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.community_admins ca JOIN public.identities i ON i.user_id=ca.user_id
+    WHERE ca.user_id=p_actor AND ca.role='owner' AND i.portal_status='active'
+  ) THEN RAISE EXCEPTION 'Only the active Owner can change roles.' USING ERRCODE='P0001'; END IF;
+  IF p_target=p_actor THEN RAISE EXCEPTION 'The Owner account is protected.' USING ERRCODE='P0001'; END IF;
+  IF p_new_role NOT IN ('member','management','admin','moderator') THEN
+    RAISE EXCEPTION 'Invalid dashboard role.' USING ERRCODE='P0001';
+  END IF;
+  SELECT i.portal_status,ca.role INTO target_status,previous_role
+    FROM public.identities i LEFT JOIN public.community_admins ca ON ca.user_id=i.user_id
+    WHERE i.user_id=p_target
+    FOR UPDATE OF i;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Registered dashboard account not found.' USING ERRCODE='P0001'; END IF;
+  IF previous_role='owner' THEN RAISE EXCEPTION 'Owner role is protected.' USING ERRCODE='P0001'; END IF;
+  IF target_status<>'active' THEN RAISE EXCEPTION 'Restore the inactive account before changing roles.' USING ERRCODE='P0001'; END IF;
+  previous_role:=COALESCE(previous_role,'member');
+  IF previous_role=p_new_role THEN
+    RETURN QUERY SELECT p_target,p_new_role;
+    RETURN;
+  END IF;
+  IF p_new_role='member' THEN
+    DELETE FROM public.community_admins ca WHERE ca.user_id=p_target AND ca.role<>'owner';
+  ELSE
+    INSERT INTO public.community_admins(user_id,role)
+      VALUES(p_target,p_new_role)
+      ON CONFLICT(user_id) DO UPDATE SET role=EXCLUDED.role
+      WHERE public.community_admins.role<>'owner';
+  END IF;
+  INSERT INTO public.portal_account_audit(actor_user_id,target_user_id,action,details)
+    VALUES(p_actor,p_target,'role_change',jsonb_build_object('from',previous_role,'to',p_new_role,'source','dashboard_owner_control'));
+  RETURN QUERY SELECT p_target,p_new_role;
+END;
+$fn$;
+
+
+CREATE FUNCTION public.portal_change_status(p_actor uuid,p_target uuid,p_new_status text)
+RETURNS TABLE(user_id uuid,portal_status text)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path=public
+AS $fn$
+DECLARE previous_status text;
+DECLARE target_role text;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.community_admins ca JOIN public.identities i ON i.user_id=ca.user_id
+    WHERE ca.user_id=p_actor AND ca.role='owner' AND i.portal_status='active'
+  ) THEN RAISE EXCEPTION 'Only the active Owner can update account access.' USING ERRCODE='P0001'; END IF;
+  IF p_target=p_actor THEN RAISE EXCEPTION 'The Owner account is protected.' USING ERRCODE='P0001'; END IF;
+  IF p_new_status NOT IN ('active','disabled','removed') THEN
+    RAISE EXCEPTION 'Invalid account status.' USING ERRCODE='P0001';
+  END IF;
+  SELECT i.portal_status,ca.role INTO previous_status,target_role
+    FROM public.identities i LEFT JOIN public.community_admins ca ON ca.user_id=i.user_id
+    WHERE i.user_id=p_target
+    FOR UPDATE OF i;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Registered dashboard account not found.' USING ERRCODE='P0001'; END IF;
+  IF target_role='owner' THEN RAISE EXCEPTION 'Owner account cannot be archived or disabled.' USING ERRCODE='P0001'; END IF;
+  IF previous_status=p_new_status THEN
+    RETURN QUERY SELECT p_target,p_new_status;
+    RETURN;
+  END IF;
+  UPDATE public.identities i SET portal_status=p_new_status,portal_status_updated_at=now()
+    WHERE i.user_id=p_target;
+  INSERT INTO public.portal_account_audit(actor_user_id,target_user_id,action,details)
+    VALUES(p_actor,p_target,'portal_status_change',jsonb_build_object('from',previous_status,'to',p_new_status,'source','dashboard_owner_control'));
+  RETURN QUERY SELECT p_target,p_new_status;
+END;
+$fn$;
