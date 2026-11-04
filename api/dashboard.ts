@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
   try {
     if (req.method === 'GET' && action === 'directory') {
-      const rows = await sql`SELECT id,display_name,ign,uid,team,role,photo_url FROM members ORDER BY created_at DESC LIMIT 3000`;
+      const rows = await sql`SELECT id,display_name,ign,uid,streamer_mode_id,team,role,photo_url FROM members ORDER BY created_at DESC LIMIT 3000`;
       return res.json({ data: rows });
     }
     const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim();
@@ -42,12 +42,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const displayName = safeName(user.user_metadata?.display_name);
       const ign = safeName(user.user_metadata?.ign, 40);
       const uid = safeName(user.user_metadata?.uid, 40);
+      const streamerId = safeName(user.user_metadata?.streamer_mode_id, 100) || null;
       if (user.email) await sql`INSERT INTO identities (user_id,email) VALUES (${userId}::uuid,${user.email}) ON CONFLICT (user_id) DO UPDATE SET email = excluded.email`;
       if (user.email && process.env.OWNER_EMAIL && user.email.toLowerCase() === process.env.OWNER_EMAIL.toLowerCase()) {
         await sql`INSERT INTO community_admins (user_id,role) SELECT ${userId}::uuid,'owner' WHERE NOT EXISTS (SELECT 1 FROM community_admins WHERE role='owner') ON CONFLICT (user_id) DO NOTHING`;
       }
       if (displayName.length >= 2 && ign.length >= 2 && uid.length >= 3) {
-        await sql`INSERT INTO member_applications (id,display_name,ign,uid) VALUES (${userId}::uuid,${displayName},${ign},${uid}) ON CONFLICT (id) DO NOTHING`;
+        await sql`INSERT INTO member_applications (id,display_name,ign,uid,streamer_mode_id) VALUES (${userId}::uuid,${displayName},${ign},${uid},${streamerId}) ON CONFLICT (id) DO NOTHING`;
       }
       return res.json({ data: { created: true } });
     }
@@ -62,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
       const [applications, members] = await Promise.all([
         sql`SELECT * FROM member_applications ORDER BY created_at DESC LIMIT 2000`,
-        sql`SELECT id,display_name,ign,uid,team,role,photo_url FROM members ORDER BY created_at DESC LIMIT 3000`,
+        sql`SELECT id,display_name,ign,uid,streamer_mode_id,team,role,photo_url FROM members ORDER BY created_at DESC LIMIT 3000`,
       ]);
       return res.json({ data: { applications, members } });
     }
@@ -70,6 +71,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!owner) return res.status(403).json({ error: 'Owner access required.' });
       const rows = await sql`SELECT a.user_id,i.email,a.role,a.created_at,a.photo_url FROM community_admins a LEFT JOIN identities i ON i.user_id=a.user_id ORDER BY a.created_at`;
       return res.json({ data: rows });
+    }
+    if (req.method === 'POST' && action === 'set_streamer_id') {
+      if (!manager) return res.status(403).json({ error: 'Management access required.' });
+      if (!isUuid(payload.member_id)) return res.status(400).json({ error: 'Invalid member.' });
+      if (typeof payload.streamer_mode_id !== 'string' || payload.streamer_mode_id.length > 100)
+        return res.status(400).json({ error: 'Streamer Mode ID must be 100 characters or fewer.' });
+      const streamerId = payload.streamer_mode_id.trim() || null;
+      // Keep roster and the linked application consistent in one Postgres statement.
+      const rows = await sql`WITH updated_member AS (
+        UPDATE members SET streamer_mode_id=${streamerId}, updated_at=now()
+        WHERE id=${payload.member_id}::uuid RETURNING id,user_id,streamer_mode_id
+      ), updated_application AS (
+        UPDATE member_applications SET streamer_mode_id=${streamerId},updated_at=now()
+        WHERE id IN (SELECT user_id FROM updated_member WHERE user_id IS NOT NULL) RETURNING id
+      ) SELECT id,streamer_mode_id FROM updated_member`;
+      if (!rows.length) return res.status(404).json({ error: 'Member not found.' });
+      return res.json({ data: rows[0] });
     }
     if (req.method === 'POST' && action === 'photo') {
       if (!isImageUrl(payload.photo_url)) return res.status(400).json({ error: 'Invalid photo URL.' });
@@ -103,10 +121,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             review_note='Approved by management',updated_at=now()
           WHERE id=${payload.id}::uuid AND status='pending' RETURNING *
         ), registered AS (
-          INSERT INTO members (user_id,display_name,ign,uid,photo_url)
-          SELECT id,display_name,ign,uid,photo_url FROM decision
+          INSERT INTO members (user_id,display_name,ign,uid,streamer_mode_id,photo_url)
+          SELECT id,display_name,ign,uid,streamer_mode_id,photo_url FROM decision
           ON CONFLICT (user_id) DO UPDATE SET display_name=excluded.display_name,
-             ign=excluded.ign,uid=excluded.uid,photo_url=excluded.photo_url,updated_at=now()
+             ign=excluded.ign,uid=excluded.uid,
+             streamer_mode_id=COALESCE(excluded.streamer_mode_id,members.streamer_mode_id),
+             photo_url=excluded.photo_url,updated_at=now()
           RETURNING id
         ) SELECT decision.* FROM decision JOIN registered ON registered.id IS NOT NULL`;
       } else {
