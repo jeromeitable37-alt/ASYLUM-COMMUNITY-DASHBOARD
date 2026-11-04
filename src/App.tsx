@@ -57,7 +57,6 @@ function App() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
-  const [verificationEmailLimited, setVerificationEmailLimited] = useState(false);
   const [resendBusy, setResendBusy] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [ign, setIgn] = useState('');
@@ -157,7 +156,6 @@ function App() {
 
   const submitAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setNotice(null);
-    setVerificationEmailLimited(false);
     try {
       if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
         throw new Error('Login is not configured on this deployment. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel Environment Variables, then redeploy.');
@@ -174,7 +172,6 @@ function App() {
         if (error) throw error;
         if (data.session) await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
         if (data.session && data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
-        setVerificationEmailLimited(false);
         if (data.session) {
           setShowAuth(false);
           setConfirmationEmail(null);
@@ -206,19 +203,9 @@ function App() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-      const code = typeof error === 'object' && error !== null && 'code' in error
-        ? String((error as {code?: string}).code || '') : '';
-      const emailRateLimit = code === 'over_email_send_rate_limit'
-        || /email rate limit exceeded|over_email_send_rate_limit/i.test(message);
-      if (emailRateLimit) {
-        setVerificationEmailLimited(true);
-        setNotice({
-          kind: 'error',
-          text: 'Verification email sending is temporarily limited for the ASYLUM community. Your signup request was not completed. Please try again later; repeated attempts will not clear the project email limit. If you already have a confirmed account, use Sign in.',
-        });
-      } else {
-        setNotice({ kind: 'error', text: message });
-      }
+      setNotice({ kind: 'error', text: /email rate limit exceeded|over_email_send_rate_limit/i.test(message)
+        ? 'Verification emails are temporarily limited for our community. This signup attempt did not complete. Please try again later rather than repeatedly pressing Register. Already confirmed? Use Sign in.'
+        : message });
     } finally { setBusy(false); }
   };
 
@@ -235,12 +222,9 @@ function App() {
       setNotice({ kind: 'success', text: 'Confirmation email requested. Please check Inbox, Spam, or Promotions. Once verified, sign in here to submit your application.' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to resend confirmation email. Try again later.';
-      if (/email rate limit exceeded|over_email_send_rate_limit/i.test(message)) {
-        setVerificationEmailLimited(true);
-        setNotice({kind: 'error', text: 'The community email sending limit is reached. No verification email was sent. Please check your inbox for an earlier message instead of requesting multiple new emails, and try again later.'});
-      } else {
-        setNotice({ kind: 'error', text: message });
-      }
+      setNotice({ kind: 'error', text: /email rate limit exceeded|over_email_send_rate_limit/i.test(message)
+        ? 'The community verification email limit has been reached. No new email was sent. Check for an earlier email and try again later.'
+        : message });
     } finally {
       setResendBusy(false);
     }
@@ -516,13 +500,7 @@ function App() {
               {!session || showAuth ? <>
                 <div className="auth-overline"><Sparkles size={13} /> SECURE ASYLUM ACCESS / 2026</div>
                 <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
-                <div className="auth-switch"><button type="button" className={authMode === 'signup' ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setNotice(null); setVerificationEmailLimited(false); }}>Register</button><button type="button" className={authMode === 'signin' ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setNotice(null); setVerificationEmailLimited(false); }}>Sign in</button></div>
-                {verificationEmailLimited && <div className="asy-auth-email-capacity" role="alert">
-                  <div className="asy-auth-email-capacity-title"><X size={17} /> Verification emails temporarily limited</div>
-                  <p>Supabase has reached its community-wide email sending limit. This registration attempt did not complete. Your entered details are still in the form, so you won't need to type them again.</p>
-                  <p>Don't keep pressing Register or Resend. You can try again later, or sign in if you already confirmed your account.</p>
-                  <button type="button" onClick={() => { setAuthMode('signin'); setNotice(null); setVerificationEmailLimited(false); }}>Already registered? Sign in <ArrowRight size={15} /></button>
-                </div>
+                <div className="auth-switch"><button type="button" className={authMode === 'signup' ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setNotice(null); }}>Register</button><button type="button" className={authMode === 'signin' ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setNotice(null); }}>Sign in</button></div>
                 {authMode === 'signup' && confirmationEmail && <div className="asy-confirm-email" role="status">
                   <div className="asy-confirm-title"><CheckCircle2 size={18} /> Verify your email before management review</div>
                   <p>We received your signup for <strong>{confirmationEmail}</strong>. Your application will be added after you confirm your email and sign in.</p>
