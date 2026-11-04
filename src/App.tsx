@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   Activity, ArrowUpRight, CheckCircle2, ChevronRight, Crown, Fingerprint,
-  LockKeyhole, LogIn, Menu, Search, ShieldCheck, Swords, UserPlus, Users, X,
+  LockKeyhole, LogIn, Menu, Search, ShieldCheck, Swords, UserPlus, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Radio, Globe2,
 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 
-type Member = { id: string; user_id?: string | null; display_name: string; ign: string | null; uid: string | null; team: string | null; role: string; photo_url: string | null };
-type Application = { id: string; display_name: string; ign: string; uid: string; photo_url: string | null; status: 'pending' | 'approved' | 'rejected'; review_note: string | null; created_at: string };
+type Member = { id: string; user_id?: string | null; display_name: string; ign: string | null; uid: string | null; streamer_mode_id: string | null; team: string | null; role: string; photo_url: string | null };
+type Application = { id: string; display_name: string; ign: string; uid: string; streamer_mode_id: string | null; photo_url: string | null; status: 'pending' | 'approved' | 'rejected'; review_note: string | null; created_at: string };
 type Notice = { kind: 'success' | 'error' | 'info'; text: string };
 type AdminRole = 'owner' | 'management' | 'moderator' | 'admin';
 type AdminAccount = { user_id: string; email: string | null; role: AdminRole; created_at: string; photo_url?: string | null };
@@ -58,6 +58,9 @@ function App() {
   const [displayName, setDisplayName] = useState('');
   const [ign, setIgn] = useState('');
   const [uid, setUid] = useState('');
+  const [streamerModeId, setStreamerModeId] = useState('');
+  const [editingStreamerFor, setEditingStreamerFor] = useState<string | null>(null);
+  const [streamerDraft, setStreamerDraft] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -108,6 +111,7 @@ function App() {
     return members.filter(member => !q ||
       (member.ign ?? '').toLowerCase().includes(q) ||
       (member.uid ?? '').toLowerCase().includes(q) ||
+      (member.streamer_mode_id ?? '').toLowerCase().includes(q) ||
       (member.team ?? '').toLowerCase().includes(q) ||
       member.display_name.toLowerCase().includes(q));
   }, [members, query]);
@@ -158,7 +162,7 @@ function App() {
         if (photoFile && (!['image/jpeg', 'image/png', 'image/webp'].includes(photoFile.type) || photoFile.size > 5 * 1024 * 1024)) throw new Error('Choose a JPG, PNG, or WebP image that is 5 MB or smaller.');
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(), password,
-          options: { data: { display_name: cleanName, ign: cleanIgn, uid: cleanUid } },
+          options: { data: { display_name: cleanName, ign: cleanIgn, uid: cleanUid, streamer_mode_id: streamerModeId.trim() || null } },
         });
         if (error) throw error;
         if (data.session) await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
@@ -183,6 +187,23 @@ function App() {
       }
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Something went wrong. Please try again.' });
+    } finally { setBusy(false); }
+  };
+
+  // Staff can complete Streamer Mode details for already-registered members.
+  const saveStreamerModeId = async (member: Member) => {
+    if (!isAdmin) return;
+    setBusy(true); setNotice(null);
+    try {
+      const saved = await dashboard<{ id: string; streamer_mode_id: string | null }>('set_streamer_id', {
+        body: { member_id: member.id, streamer_mode_id: streamerDraft.trim() },
+      });
+      setMembers(current => current.map(item => item.id === member.id
+        ? { ...item, streamer_mode_id: saved.streamer_mode_id } : item));
+      setEditingStreamerFor(null);
+      setNotice({ kind: 'success', text: 'Streamer Mode ID saved for ' + (member.ign || member.display_name) + '.' });
+    } catch (error) {
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to update Streamer Mode ID.' });
     } finally { setBusy(false); }
   };
 
@@ -325,7 +346,17 @@ function App() {
             {results.map(member => <article className="member-card" key={member.id}>
               <div className="card-topline">{member.photo_url ? <img className="member-avatar" src={member.photo_url} alt={member.ign ?? member.display_name} /> : <span className="member-icon"><Users size={20} /></span>}<span className="status-pill"><span /> Approved member</span></div>
               <h3>{member.ign || member.display_name}</h3><p className="member-uid">UID: {member.uid || 'Not provided'}</p><div className="member-divider" />
-              <div className="member-details"><span>NAME</span><strong>{member.display_name}</strong></div><div className="member-details"><span>TEAM</span><strong>{member.team || 'Community'}</strong></div><div className="member-details"><span>ROLE</span><strong>{member.role || 'Member'}</strong></div>
+              <div className="member-details"><span>NAME</span><strong>{member.display_name}</strong></div><div className="member-details"><span>SMODE ID</span><strong className={member.streamer_mode_id ? 'streamer-value' : 'streamer-empty'}>{member.streamer_mode_id || 'Not provided'}</strong></div><div className="member-details"><span>TEAM</span><strong>{member.team || 'Community'}</strong></div><div className="member-details"><span>ROLE</span><strong>{member.role || 'Member'}</strong></div>
+              {isAdmin && <div className="streamer-editor">
+                {editingStreamerFor === member.id ? <div className="streamer-editor-form">
+                  <label htmlFor={'streamer-' + member.id}>STREAMER MODE ID</label>
+                  <input id={'streamer-' + member.id} type="text" maxLength={100} value={streamerDraft} onChange={e => setStreamerDraft(e.target.value)} placeholder="Leave blank if not applicable" />
+                  <div className="streamer-editor-actions">
+                    <button className="approve-button" type="button" disabled={busy} onClick={() => void saveStreamerModeId(member)}><Save size={14} /> Save ID</button>
+                    <button className="button-quiet" type="button" disabled={busy} onClick={() => setEditingStreamerFor(null)}>Cancel</button>
+                  </div>
+                </div> : <button className="streamer-edit-button" type="button" disabled={busy} onClick={() => { setEditingStreamerFor(member.id); setStreamerDraft(member.streamer_mode_id || ''); }}><Pencil size={14} /> {member.streamer_mode_id ? 'Edit Streamer ID' : 'Add Streamer ID'}</button>}
+              </div>}
               {isAdmin && <button className="danger-link" disabled={busy} onClick={() => void removeMember(member)}>Remove from directory</button>}
               {isAdmin && <label className="photo-upload-control">{member.photo_url ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadDirectoryPhoto(member, file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label>}
               <div className="member-foot"><span><Activity size={14} /> Official record</span><span className="card-arrow"><ArrowUpRight size={17} /></span></div>
@@ -349,6 +380,7 @@ function App() {
                     <label htmlFor="display-name">FULL NAME</label><input id="display-name" required minLength={2} maxLength={60} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
                     <label htmlFor="ign">IN-GAME NAME (IGN)</label><input id="ign" required minLength={2} maxLength={40} value={ign} onChange={e => setIgn(e.target.value)} placeholder="Your exact IGN" />
                     <label htmlFor="uid">PLAYER UID</label><input id="uid" required minLength={3} maxLength={40} value={uid} onChange={e => setUid(e.target.value)} placeholder="Your game UID" />
+                    <label htmlFor="streamer-mode-id">STREAMER MODE ID <span className="field-hint">Optional · for players using SMode</span></label><input id="streamer-mode-id" maxLength={100} value={streamerModeId} onChange={e => setStreamerModeId(e.target.value)} placeholder="Enter Streamer Mode ID if applicable" />
                     <label htmlFor="profile-photo">PROFILE PICTURE <span className="field-hint">Optional · JPG, PNG or WebP · max 5 MB</span></label><input id="profile-photo" type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setPhotoFile(e.target.files?.[0] ?? null)} />
                   </>}
                   <label htmlFor="account-email">EMAIL ADDRESS</label><input id="account-email" type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
@@ -357,7 +389,7 @@ function App() {
                 </form><p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
               </> : <div className="signed-in-panel">
                 <span className="account-icon"><CheckCircle2 /></span><h3>You’re signed in</h3><p>{session.user.email}</p>
-                {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : <><p>No member application is linked to this account yet. If you signed up before registration was enabled, contact management.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></>}
+                {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : <><p>No member application is linked to this account yet. If you signed up before registration was enabled, contact management.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></>}
                 <button className="button-primary form-submit" onClick={() => void signOut()}>Sign out <ArrowUpRight size={17} /></button>{isAdmin && <button className="button-quiet" onClick={() => scrollTo('admin-panel')}>Open management panel</button>}
               </div>}
             </div>
