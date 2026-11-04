@@ -2,6 +2,25 @@
 
 Migrated React/Vite dashboard with **Neon PostgreSQL** for dashboard records, **Vercel Functions** for all database access, and the existing **Supabase Auth and Storage** (to preserve current users and photo URLs). The Recruitment site stays separate.
 
+## Official ASYLUM network
+
+This is the **main link** for ASYLUM COMMUNITY:
+
+- Main portal and verified members: https://asylum-community-dashboard.vercel.app/
+- Direct / Referral Recruitment: https://asylum-community-recruitment-sigma.vercel.app/
+- Official Jersey Drop: https://asylum-jersey-nu.vercel.app/
+
+These remain **three separate sites**, connected with navigation links. This dashboard has its own Neon PostgreSQL tables; the Recruitment site and Jersey order flow are not moved or modified by the database upgrade.
+
+## Streamer Mode ID
+
+- New registrants can optionally submit their Streamer Mode ID (SMode ID) at signup.
+- The public official member directory supports searching by IGN, UID, Streamer Mode ID, or team.
+- Authorized management and moderators can complete or correct the SMode ID of existing approved members using the **Add / Edit Streamer ID** control on the member card.
+- Updates go through authenticated `/api/dashboard?action=set_streamer_id` and are saved in Neon `members`, with the associated `member_applications` record updated as well.
+- Missing values are displayed as `Not provided`; entering an empty value removes the optional ID.
+- Run the idempotent additions in `schema.sql` when setting up a new Neon environment.
+
 ## Deployment
 
 1. Import this repository into Vercel as a **Vite** project. Build command: `npm run build`. Output: `dist`.
