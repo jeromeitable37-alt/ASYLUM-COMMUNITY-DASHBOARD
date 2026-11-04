@@ -1,6 +1,6 @@
 import type { VercelRequest } from '@vercel/node';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import type { neon } from '@neondatabase/serverless';
+import type { NeonQueryFunction } from '@neondatabase/serverless';
 
 /**
  * Preview-to-production migration gate for Managed Neon Auth.
@@ -8,7 +8,7 @@ import type { neon } from '@neondatabase/serverless';
  * derives dashboard admin rights from the new Neon Auth role column.
  * The legacy dashboard UUID remains canonical in all existing tables.
  */
-type Sql = ReturnType<typeof neon>;
+type Sql = NeonQueryFunction<false, false>;
 
 export class PortalAuthError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
