@@ -139,81 +139,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (req.method === 'POST' && action === 'user_role') {
       if (!owner) return res.status(403).json({ error: 'Owner access required.' });
-      if (!isUuid(payload.user_id) || payload.user_id===userId) return res.status(400).json({error:'Invalid target account.'});
+      if (!isUuid(payload.user_id) || payload.user_id === userId)
+        return res.status(400).json({error:'Choose a registered account other than the current Owner.'});
       const newRole = String(payload.role || '');
-      if (!['member','management','admin','moderator'].includes(newRole)) return res.status(400).json({error:'Choose a valid role.'});
-      const target = await sql`SELECT i.user_id,i.portal_status,a.role AS existing_role FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id WHERE i.user_id=${payload.user_id}::uuid LIMIT 1`;
-      if (!target.length) return res.status(404).json({error:'Registered account not found.'});
-      if (target[0].existing_role==='owner') return res.status(403).json({error:'Owner role cannot be changed here.'});
-      if (target[0].portal_status!=='active') return res.status(409).json({error:'Restore this account before changing its role.'});
-      // One atomic Neon SQL statement per role change, including the audit event.
-      let changed;
-      if (newRole==='member') {
-        changed = await sql`WITH eligible AS (
-          SELECT i.user_id,COALESCE(a.role,'member') AS previous_role
-          FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id
-          WHERE i.user_id=${payload.user_id}::uuid AND i.portal_status='active'
-            AND a.role IS DISTINCT FROM 'owner'
-        ), demoted AS (
-          DELETE FROM community_admins WHERE user_id IN
-            (SELECT user_id FROM eligible WHERE previous_role<>'member') AND role<>'owner'
-          RETURNING user_id
-        ), audited AS (
-          INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details)
-          SELECT ${userId}::uuid,d.user_id,'role_change',
-            jsonb_build_object('from',e.previous_role,'to','member')
-          FROM demoted d JOIN eligible e ON e.user_id=d.user_id
-          RETURNING id
-        ) SELECT d.user_id,'member' AS role FROM demoted d WHERE EXISTS(SELECT 1 FROM audited)`;
-      } else {
-        changed = await sql`WITH eligible AS (
-          SELECT i.user_id,COALESCE(a.role,'member') AS previous_role
-          FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id
-          WHERE i.user_id=${payload.user_id}::uuid AND i.portal_status='active'
-            AND a.role IS DISTINCT FROM 'owner'
-        ), promoted AS (
-          INSERT INTO community_admins(user_id,role)
-          SELECT user_id,${newRole} FROM eligible WHERE previous_role<>${newRole}
-          ON CONFLICT(user_id) DO UPDATE SET role=EXCLUDED.role WHERE community_admins.role<>'owner'
-          RETURNING user_id,role
-        ), audited AS (
-          INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details)
-          SELECT ${userId}::uuid,p.user_id,'role_change',
-            jsonb_build_object('from',e.previous_role,'to',p.role)
-          FROM promoted p JOIN eligible e ON e.user_id=p.user_id
-          RETURNING id
-        ) SELECT p.user_id,p.role FROM promoted p WHERE EXISTS(SELECT 1 FROM audited)`;
-      }
-      if (!changed.length) return res.status(409).json({
-        error: 'Role is already set, this account is inactive, or it has a protected role. Refresh the users list.'
-      });
+      if (!['member','management','admin','moderator'].includes(newRole))
+        return res.status(400).json({error:'Choose a valid dashboard role.'});
+      const changed = await sql`SELECT user_id,role FROM public.portal_change_role(
+        ${userId}::uuid,${payload.user_id}::uuid,${newRole}
+      )`;
+      if (!changed.length) return res.status(409).json({error:'Role update was not applied. Refresh and retry.'});
       return res.json({data:changed[0]});
     }
     if (req.method === 'POST' && action === 'user_status') {
       if (!owner) return res.status(403).json({error:'Owner access required.'});
-      if (!isUuid(payload.user_id) || payload.user_id===userId) return res.status(400).json({error:'Cannot change your own owner account.'});
-      const nextStatus = String(payload.portal_status || '');
-      if (!['active','disabled','removed'].includes(nextStatus)) return res.status(400).json({error:'Invalid account status.'});
-      const existing = await sql`SELECT i.portal_status,a.role FROM identities i LEFT JOIN community_admins a ON a.user_id=i.user_id WHERE i.user_id=${payload.user_id}::uuid LIMIT 1`;
-      if (!existing.length) return res.status(404).json({error:'Account not found.'});
-      if (existing[0].role==='owner') return res.status(403).json({error:'Owner account is protected.'});
-      // One atomic SQL statement: update and audit must always succeed or fail together.
-      const changed = await sql`
-        WITH updated AS (
-          UPDATE identities
-          SET portal_status=${nextStatus},portal_status_updated_at=now()
-          WHERE user_id=${payload.user_id}::uuid AND portal_status=${String(existing[0].portal_status)}
-          RETURNING user_id,portal_status
-        ), audited AS (
-          INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details)
-          SELECT ${userId}::uuid,u.user_id,'portal_status_change',
-                 jsonb_build_object('from',${String(existing[0].portal_status)},'to',u.portal_status)
-          FROM updated u
-          RETURNING id
-        )
-        SELECT u.user_id,u.portal_status FROM updated u WHERE EXISTS(SELECT 1 FROM audited)
-      `;
-      if (!changed.length) return res.status(409).json({error:'Account status changed while you were editing. Refresh the list and try again.'});
+      if (!isUuid(payload.user_id) || payload.user_id === userId)
+        return res.status(400).json({error:'The Owner account cannot be archived or disabled.'});
+      const newStatus = String(payload.portal_status || '');
+      if (!['active','disabled','removed'].includes(newStatus))
+        return res.status(400).json({error:'Choose a valid account status.'});
+      const changed = await sql`SELECT user_id,portal_status FROM public.portal_change_status(
+        ${userId}::uuid,${payload.user_id}::uuid,${newStatus}
+      )`;
+      if (!changed.length) return res.status(409).json({error:'Status was not changed. Refresh the users list.'});
       return res.json({data:changed[0]});
     }
     if (req.method === 'POST' && action === 'set_streamer_id') {
@@ -316,6 +263,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(404).json({ error: 'Unknown API operation.' });
   } catch (err) {
     console.error('Dashboard API error', err);
-    return res.status(500).json({ error: 'Unable to complete request. Please retry or contact management.' });
+    const message = err instanceof Error ? err.message : '';
+    // These phrases are deliberately authored in the isolated Neon procedures.
+    // Return only known safe errors, never internal SQL/connection diagnostics.
+    const safePortalMessages = [
+      'Only the active Owner can change roles.',
+      'Only the active Owner can update account access.',
+      'The Owner account is protected.',
+      'Owner role is protected.',
+      'Owner account cannot be archived or disabled.',
+      'Invalid dashboard role.',
+      'Invalid account status.',
+      'Registered dashboard account not found.',
+      'Restore the inactive account before changing roles.',
+    ];
+    if (['user_role','user_status'].includes(action)) {
+      const safeMessage = safePortalMessages.find(item => message.includes(item));
+      if (safeMessage) return res.status(409).json({error:safeMessage});
+    }
+    return res.status(500).json({ error: 'Dashboard database request failed. No change was confirmed. Refresh and retry, or contact the Owner.' });
   }
 }
