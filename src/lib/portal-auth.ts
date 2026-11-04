@@ -1,4 +1,5 @@
-import { createAuthClient, SupabaseAuthAdapter } from '@neondatabase/auth';
+import { createAuthClient } from '@neondatabase/auth';
+import { SupabaseAuthAdapter } from '@neondatabase/auth/vanilla/adapters';
 
 // Only the dashboard's branch-scoped Neon Auth endpoint is used.
 // A missing URL is an error: never fall back to the shared Supabase project.
