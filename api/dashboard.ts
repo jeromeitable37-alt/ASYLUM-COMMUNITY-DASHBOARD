@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requirePortalIdentity, PortalAuthError } from './lib/neon-identity';
+import { requirePortalIdentity, PortalAuthError } from './lib/neon-identity.js';
 import { neon } from '@neondatabase/serverless';
 
 const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
