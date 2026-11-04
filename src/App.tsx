@@ -269,7 +269,7 @@ function App() {
 
   return (
     <div className="site-shell">
-      <div className="announcement"><span className="pulse-dot" /> ASYLUM COMMUNITY OFFICIAL DASHBOARD <span className="announcement-right">COMMUNITY • TEAMS • MANAGEMENT</span></div>
+      <div className="announcement"><span className="pulse-dot" /> ASYLUM COMMUNITY OFFICIAL DASHBOARD <span className="announcement-right">COMMUNITY • OFFICIAL MEMBERS • MANAGEMENT</span></div>
       <header className="topbar">
         <a className="brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>
           <img className="brand-logo" src="/resources/asylum-community-logo.jpg" alt="Asylum Community logo" onError={e => { e.currentTarget.style.display = 'none'; }} />
@@ -277,7 +277,7 @@ function App() {
         </a>
         <nav className={mobileOpen ? 'nav-links open' : 'nav-links'}>
           <button onClick={() => scrollTo('directory')}>Directory</button>
-          <button onClick={() => { setActiveTab('Teams'); scrollTo('directory'); }}>Teams</button>
+          <button onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}>Official Members</button>
           <button onClick={() => { setActiveTab('Management'); scrollTo('directory'); }}>Management</button>
           {isAdmin && <button onClick={() => scrollTo('admin-panel')}>Admin panel</button>}
           <button className="nav-cta" onClick={() => { if (session) { setShowAuth(false); scrollTo('account'); } else { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); } }}>
@@ -386,7 +386,7 @@ function App() {
 
         <section className="bottom-cta"><div className="cta-mark"><ShieldCheck size={24} /></div><div><div className="section-kicker">BUILT AROUND TRUST</div><h2>Official means <span>confirmed.</span></h2><p>Keep the directory accurate, clear, and managed by authorized people.</p></div><button className="button-primary" onClick={() => { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); }}>Join Asylum <ArrowUpRight size={17} /></button></section>
       </main>
-      <footer className="footer"><a className="footer-brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>ASYLUM <span>COMMUNITY</span></a><span>COMMUNITY • TEAMS • MANAGEMENT</span><span>© {new Date().getFullYear()} ASYLUM COMMUNITY · OFFICIAL DIRECTORY</span></footer>
+      <footer className="footer"><a className="footer-brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>ASYLUM <span>COMMUNITY</span></a><span>COMMUNITY • OFFICIAL MEMBERS • MANAGEMENT</span><span>© {new Date().getFullYear()} ASYLUM COMMUNITY · OFFICIAL DIRECTORY</span></footer>
     </div>
   );
 }
