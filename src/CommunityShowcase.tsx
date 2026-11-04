@@ -7,6 +7,7 @@ import {
   Users, X,
 } from 'lucide-react';
 import { portalAuth } from './lib/portal-auth';
+import { readApiEnvelope } from './lib/read-api';
 import { uploadPortalImage } from './lib/portal-images';
 import './community-showcase.css';
 
@@ -75,9 +76,8 @@ async function showApi<T>(action: string, body?: Record<string, unknown>): Promi
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Unable to load community content.');
-  return data.data as T;
+  const data = await readApiEnvelope<T>(res, 'Unable to load community content right now.');
+  return data.data;
 }
 
 type Props = {
