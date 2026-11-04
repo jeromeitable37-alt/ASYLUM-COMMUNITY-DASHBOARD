@@ -52,3 +52,41 @@
 .asy-confirm-actions button:focus-visible{outline:2px solid #f8b5a6;outline-offset:3px}
 @media(max-width:530px){.asy-confirm-email{padding:14px}.asy-confirm-actions{flex-direction:column;align-items:stretch}.asy-confirm-actions button{width:100%}}
 @media(prefers-reduced-motion:reduce){.asy-confirm-actions button{transition:none}}
+
+
+/* Required SMode field + legacy member profile completion */
+.asy-streamer-required-note {
+  display:block;
+  padding:0 1px;
+  margin:-4px 0 10px;
+  font-size:11px;
+  line-height:1.55;
+  color:#e7adb7;
+}
+#streamer-mode-id:focus-visible,
+#my-streamer-mode:focus-visible {
+  outline:2px solid #ff8496;
+  outline-offset:2px;
+}
+.asy-complete-streamer-form {
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin:20px 0;
+  padding:20px;
+  border-radius:12px;
+  border:1px solid #824355;
+  background:linear-gradient(150deg,rgba(88,25,44,.5),rgba(21,17,23,.9));
+}
+.asy-complete-streamer-label {display:flex;align-items:center;gap:8px;color:#ffd4da;font-size:14px;font-weight:850}
+.asy-complete-streamer-label svg{color:#ff7489;flex-shrink:0}
+.asy-complete-streamer-form p {color:#cbb6c2;font-size:12px;line-height:1.7;margin:0 0 4px}
+.asy-complete-streamer-form label {display:flex;justify-content:space-between;gap:10px;font-size:10px;color:#e5b7c3;letter-spacing:.08em;font-weight:800}
+.asy-complete-streamer-form label span {color:#ff9aa9}
+.asy-complete-streamer-form input {
+  width:100%;min-width:0;background:#130d12;color:white;border:1px solid #704353;
+  border-radius:8px;padding:13px 14px;font-size:14px;
+}
+.asy-complete-streamer-form input::placeholder {color:#947b85}
+.asy-complete-streamer-form button {width:100%;justify-content:center;display:flex;align-items:center;gap:9px}
+@media(max-width:540px){.asy-complete-streamer-form{padding:14px}}
