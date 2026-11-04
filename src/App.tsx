@@ -164,77 +164,122 @@ function App() {
   const submitAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setNotice(null);
     try {
-      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-        throw new Error('Login is not configured on this deployment. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel Environment Variables, then redeploy.');
-      }
+      if (!import.meta.env.VITE_NEON_AUTH_URL)
+        throw new Error('Neon Auth preview URL is not configured. Please contact management.');
+      const normalizedEmail = email.trim().toLowerCase();
       if (authMode === 'signup') {
         const cleanName = displayName.trim(), cleanIgn = ign.trim(), cleanUid = uid.trim(), cleanStreamerId = streamerModeId.trim();
-        if (cleanName.length < 2 || cleanIgn.length < 2 || cleanUid.length < 3) throw new Error('Enter your name, IGN (at least 2 characters), and UID (at least 3 characters).');
-        if (!cleanStreamerId || cleanStreamerId.length > 100) throw new Error('Streamer Mode ID is mandatory. Enter your actual ID (maximum 100 characters).');
-        if (photoFile && (!['image/jpeg', 'image/png', 'image/webp'].includes(photoFile.type) || photoFile.size > 5 * 1024 * 1024)) throw new Error('Choose a JPG, PNG, or WebP image that is 5 MB or smaller.');
-        const { data, error } = await portalAuth.signUp({
-          email: email.trim(), password,
-          options: { data: { display_name: cleanName, ign: cleanIgn, uid: cleanUid, streamer_mode_id: cleanStreamerId } },
+        if (cleanName.length < 2 || cleanIgn.length < 2 || cleanUid.length < 3)
+          throw new Error('Enter your full name, IGN, and CODM UID.');
+        if (!cleanStreamerId || cleanStreamerId.length > 100)
+          throw new Error('Streamer Mode ID is required (maximum 100 characters).');
+        if (photoFile && (!['image/jpeg','image/png','image/webp'].includes(photoFile.type) || photoFile.size > 5*1024*1024))
+          throw new Error('Upload a JPG, PNG or WebP image no larger than 5 MB.');
+        // Persist only the non-secret application fields while verification
+        // occurs. No password or Auth tokens are stored in this draft.
+        savePendingRegistration({
+          email: normalizedEmail, display_name: cleanName,
+          ign: cleanIgn, uid: cleanUid, streamer_mode_id: cleanStreamerId,
+        });
+        const { error } = await portalAuth.signUp({
+          email: normalizedEmail, password,
+          options: { data: { name: cleanName } },
         });
         if (error) throw error;
-        if (data.session) await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
-        if (data.session && data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
-        if (data.session) {
-          setShowAuth(false);
-          setConfirmationEmail(null);
-        } else {
-          setConfirmationEmail(email.trim());
+        setPassword('');
+        setConfirmationEmail(normalizedEmail);
+        setShowAuth(true);
+        try {
+          const result = await neonEmailAuth.emailOtp.sendVerificationOtp({
+            email: normalizedEmail, type: 'email-verification',
+          });
+          if (result.error) throw new Error(result.error.message || 'Verification code could not be sent.');
+          setNotice({kind:'success',text:'Neon account created. Check your email for the six-digit code below. Your application will be saved after verification and sign in.'});
+        } catch (sendError) {
+          setNotice({kind:'error',text:'Account created, but Neon could not send the verification code: ' +
+            (sendError instanceof Error ? sendError.message : 'Email delivery is not ready.') +
+            '. Use Resend verification code later. Do not register again.'});
         }
-        setNotice({ kind: 'success', text: data.session
-          ? 'Registration submitted! Your application is waiting for management approval.'
-          : 'Check your email to confirm your account, then sign in to finish your profile photo upload. Your application will appear after you confirm your email and sign in.' });
       } else {
-        const { data, error } = await portalAuth.signInWithPassword({ email: email.trim(), password });
+        const { data, error } = await portalAuth.signInWithPassword({ email: normalizedEmail, password });
         if (error) throw error;
-        if (!data.session?.access_token) throw new Error('Authentication succeeded, but no login session was returned.');
+        const current = data.session || (await portalAuth.getSession()).data.session;
+        if (!current?.access_token) throw new Error('Neon sign-in returned no token.');
+        setSession(current as PortalSession);
+        setPassword('');
         setConfirmationEmail(null);
         setShowAuth(false);
-        setPassword('');
-        try {
-          await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
-          if (data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
-          setNotice({ kind: 'success', text: 'You are signed in.' });
-        } catch (setupError) {
-          const message = setupError instanceof Error ? setupError.message : 'Check the database and Vercel settings.';
-          if (/disabled|removed from the official portal/i.test(message)) {
-            await portalAuth.signOut();
-            setShowAuth(true);
+        const draft = readPendingRegistration();
+        if (draft && draft.email.toLowerCase() === normalizedEmail) {
+          try {
+            await dashboard('bootstrap', {token:current.access_token,body:{
+              display_name:draft.display_name,ign:draft.ign,uid:draft.uid,
+              streamer_mode_id:draft.streamer_mode_id,
+            }});
+            clearPendingRegistration();
+          } catch (profileError) {
+            if (profileError instanceof Error && /verify your Neon Auth email/i.test(profileError.message)) {
+              setConfirmationEmail(normalizedEmail);
+              setShowAuth(true);
+              setNotice({kind:'error',text:profileError.message});
+              return;
+            }
+            throw profileError;
           }
-          setNotice({ kind: 'error', text: message.includes('disabled') || message.includes('removed') ? message : 'Login succeeded, but dashboard initialization failed: ' + message });
         }
+        setNotice({kind:'success',text:'Signed in with Neon Auth. Your application is connected to the Official Dashboard.'});
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-      setNotice({ kind: 'error', text: /email rate limit exceeded|over_email_send_rate_limit/i.test(message)
-        ? 'Verification emails are temporarily limited for our community. This signup attempt did not complete. Please try again later rather than repeatedly pressing Register. Already confirmed? Use Sign in.'
-        : message });
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Authentication failed. Please retry.'});
     } finally { setBusy(false); }
   };
 
   const resendConfirmation = async () => {
     if (!confirmationEmail || resendBusy) return;
-    setResendBusy(true);
-    setNotice(null);
+    setResendBusy(true); setNotice(null);
     try {
-      const { error } = await portalAuth.resend({
-        type: 'signup',
-        email: confirmationEmail.trim(),
+      const {error} = await neonEmailAuth.emailOtp.sendVerificationOtp({
+        email:confirmationEmail,type:'email-verification',
       });
       if (error) throw error;
-      setNotice({ kind: 'success', text: 'Confirmation email requested. Please check Inbox, Spam, or Promotions. Once verified, sign in here to submit your application.' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to resend confirmation email. Try again later.';
-      setNotice({ kind: 'error', text: /email rate limit exceeded|over_email_send_rate_limit/i.test(message)
-        ? 'The community verification email limit has been reached. No new email was sent. Check for an earlier email and try again later.'
-        : message });
-    } finally {
-      setResendBusy(false);
+      setNotice({kind:'success',text:'Verification code requested from Neon Auth. Check your email, then enter the code below.'});
+    } catch(error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Could not resend code. Try again later.'});
+    } finally { setResendBusy(false); }
+  };
+
+  const confirmVerification = async (event:FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmationEmail || !/^\d{6,8}$/.test(emailOtp.trim())) {
+      setNotice({kind:'error',text:'Enter the verification code from your email.'});
+      return;
     }
+    setVerifyBusy(true);setNotice(null);
+    try {
+      const {error} = await neonEmailAuth.emailOtp.verifyEmail({
+        email:confirmationEmail,otp:emailOtp.trim(),
+      });
+      if (error) throw error;
+      setEmailOtp(''); setConfirmationEmail(null); setAuthMode('signin');
+      setNotice({kind:'success',text:'Email verified with Neon Auth. Sign in to finish your membership application. You do not need to register again.'});
+    } catch(error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to verify code.'});
+    } finally {setVerifyBusy(false);}
+  };
+
+  const completeApplication = async (event:FormEvent<HTMLFormElement>) => {
+    event.preventDefault();setBusy(true);setNotice(null);
+    try {
+      await dashboard('bootstrap',{body:{
+        display_name:missingFullName.trim(),ign:missingIgn.trim(),
+        uid:missingUid.trim(),streamer_mode_id:missingStreamer.trim(),
+      }});
+      const profile=await dashboard<{application:Application|null}>('profile');
+      setApplication(profile.application);
+      setNotice({kind:'success',text:'Your official ASYLUM application is now submitted for management review.'});
+    } catch(error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Could not complete your profile.'});
+    } finally{setBusy(false);}
   };
 
   const saveOwnStreamerId = async (event: FormEvent<HTMLFormElement>) => {
