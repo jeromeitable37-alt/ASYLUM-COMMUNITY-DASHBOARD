@@ -21,6 +21,18 @@ These remain **three separate sites**, connected with navigation links. This das
 - Missing values are displayed as `Not provided`; entering an empty value removes the optional ID.
 - Run the idempotent additions in `schema.sql` when setting up a new Neon environment.
 
+## Cyber UI and owner account center
+
+- **Leadership profiles:** responsive medium-size staff cards with photo, display name, **IGN**, role and introduction. The public API joins verified member/application information and never exposes staff email addresses.
+- **Owner → User Management:** browsable accounts, filtered by IGN, name, email, current role or portal status. Select **Member**, **Moderator**, **Admin** or **Management Admin** from an account card; press **Save**. The Owner cannot demote or remove themselves here.
+- **Disable / Remove / Restore:** these are **portal-only** status changes in Neon. Disabled or removed users cannot access authenticated official dashboard APIs and are hidden from its public directory; historical rows remain intact for recovery. This does not globally deactivate their **Supabase Auth** account, and **does not disable Recruitment** because that website shares the same Supabase Auth project.
+- **Audit trail:** role and portal-status changes record actor, target, action and timestamp in `portal_account_audit`.
+- **About ASYLUM:** editable founder, founding date, origin, headline, description and mission via the **Edit About ASYLUM** action. Default founder and date are explicitly unconfirmed, not invented.
+- **Login:** glassmorphism, floating labels, show/hide password toggle, subtle CSS animated gradients, interactive accent styling, keyboard focus support and reduced-motion fallbacks. No heavy Three.js assets needed.
+- **Admin permissions:** user-role and status operations are restricted to the current Owner; website showcase content is still editable by authorized management staff.
+
+Database migrations are versioned in `schema.sql`. Never paste Neon connection secrets or Supabase service-role credentials into GitHub.
+
 ## Deployment
 
 1. Import this repository into Vercel as a **Vite** project. Build command: `npm run build`. Output: `dist`.
