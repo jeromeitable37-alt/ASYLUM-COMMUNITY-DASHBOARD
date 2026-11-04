@@ -30,7 +30,11 @@ export default function CinematicMedia() {
   const [selected, setSelected] = useState(0);
   const [playing, setPlaying] = useState(false);
   const current = officialVideos[selected];
-  const thumbnail = (id: string) => 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg';
+  const thumbnail = (id: string) => 'https://i.ytimg.com/vi/' + id + '/maxresdefault.jpg';
+  const fallbackThumbnail = (img: HTMLImageElement, id: string) => {
+    const fallback = 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg';
+    if (img.src !== fallback) img.src = fallback;
+  };
   const select = (index: number) => {
     setSelected(index);
     setPlaying(false);
@@ -64,7 +68,7 @@ export default function CinematicMedia() {
                 className="asy-cinema-cover"
                 onClick={() => setPlaying(true)}
                 aria-label={'Play ' + current.title + ' on YouTube'}>
-                <img src={thumbnail(current.id)} alt={current.subtitle + ' official thumbnail'} loading="lazy" />
+                <img src={thumbnail(current.id)} alt={current.subtitle + ' official thumbnail'} loading="lazy" onError={event => fallbackThumbnail(event.currentTarget, current.id)} />
                 <span className="asy-cinema-play" aria-hidden="true"><Play size={29} fill="currentColor" /></span>
                 <span className="asy-cinema-cover-prompt">CLICK TO PLAY THE OFFICIAL TRAILER</span>
               </button>
@@ -85,7 +89,7 @@ export default function CinematicMedia() {
               className={'asy-cinema-video-choice' + (selected === index ? ' selected' : '')}
               aria-pressed={selected === index}
               onClick={() => select(index)}>
-              <span className="asy-cinema-thumb"><img src={thumbnail(video.id)} alt="" loading="lazy" /><span><Play size={15} fill="currentColor"/></span></span>
+              <span className="asy-cinema-thumb"><img src={thumbnail(video.id)} alt="" loading="lazy" onError={event => fallbackThumbnail(event.currentTarget, video.id)} /><span><Play size={15} fill="currentColor"/></span></span>
               <span className="asy-cinema-choice-info"><small>{video.release}</small><strong>{video.title}</strong><span>{video.subtitle}</span></span>
               <ArrowUpRight size={17} className="asy-cinema-choice-arrow" />
             </button>
