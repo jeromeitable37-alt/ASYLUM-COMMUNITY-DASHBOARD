@@ -13,11 +13,6 @@ type Notice = { kind: 'success' | 'error' | 'info'; text: string };
 type AdminRole = 'owner' | 'management' | 'moderator' | 'admin';
 type AdminAccount = { user_id: string; email: string | null; role: AdminRole; created_at: string; photo_url?: string | null };
 
-const teams = [
-  { name: 'Competitive', type: 'Main roster', description: 'Official competitive lineup and tournament representatives.' },
-  { name: 'Academy', type: 'Development roster', description: 'A place for developing players and new talent.' },
-  { name: 'Community', type: 'Community team', description: 'Members helping keep the Asylum community active.' },
-];
 const managementRoles = [
   { role: 'Community Owner', description: 'Overall community leadership and final approval.' },
   { role: 'Management', description: 'Member records, team assignments, and community operations.' },
@@ -290,15 +285,16 @@ function App() {
 
   return (
     <div className="site-shell">
-      <div className="announcement"><span className="pulse-dot" /> ASYLUM COMMUNITY OFFICIAL DASHBOARD <span className="announcement-right">COMMUNITY • OFFICIAL MEMBERS • MANAGEMENT</span></div>
+      <div className="announcement"><span className="pulse-dot" /> ASYLUM COMMUNITY OFFICIAL DASHBOARD <span className="announcement-right">MAIN PORTAL  /  MEMBERS  /  RECRUITMENT  /  JERSEYS</span></div>
       <header className="topbar">
         <a className="brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>
           <img className="brand-logo" src="/resources/asylum-community-logo.jpg" alt="Asylum Community logo" onError={e => { e.currentTarget.style.display = 'none'; }} />
           <span className="brand-copy"><strong>Asylum Community</strong><small>Official Dashboard</small></span>
         </a>
         <nav className={mobileOpen ? 'nav-links open' : 'nav-links'}>
-          <button onClick={() => scrollTo('directory')}>Directory</button>
           <button onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}>Official Members</button>
+          <a className="nav-network-link" href="https://asylum-community-recruitment-sigma.vercel.app/" target="_blank" rel="noopener noreferrer" onClick={() => setMobileOpen(false)}>Recruitment <ExternalLink size={13} /></a>
+          <a className="nav-network-link" href="https://asylum-jersey-nu.vercel.app/" target="_blank" rel="noopener noreferrer" onClick={() => setMobileOpen(false)}>Jersey Drop <ExternalLink size={13} /></a>
           <button onClick={() => { setActiveTab('Management'); scrollTo('directory'); }}>Management</button>
           {isAdmin && <button onClick={() => scrollTo('admin-panel')}>Admin panel</button>}
           <button className="nav-cta" onClick={() => { if (session) { setShowAuth(false); scrollTo('account'); } else { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); } }}>
@@ -311,36 +307,68 @@ function App() {
       <main>
         <section className="hero" id="home">
           <div className="hero-grid" /><div className="hero-content">
-            <div className="eyebrow"><span className="eyebrow-line" /> OFFICIAL COMMUNITY PORTAL</div>
-            <h1>Know who’s<br /><span>really</span> one of us.</h1>
-            <p className="hero-lede">One home for Asylum Community’s official members, teams, and management. Search a player’s IGN or UID and check the directory.</p>
+            <div className="eyebrow"><span className="eyebrow-line" /> THE OFFICIAL ASYLUM COMMUNITY HOME</div>
+            <h1>ONE COMMUNITY.<br /><span>EVERY WAY IN.</span></h1>
+            <p className="hero-lede">Your starting point for everything ASYLUM. Find verified members, start your recruitment journey, or explore the latest community jersey drop. Different experiences, one official home.</p>
             <div className="hero-actions">
-              <button className="button-primary" onClick={() => scrollTo('directory')}>Explore directory <ChevronRight size={17} /></button>
-              <button className="button-quiet" onClick={() => { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); }}><UserPlus size={16} /> Apply to join</button>
+              <button className="button-primary" onClick={() => scrollTo('community-network')}>Explore the community <ArrowRight size={17} /></button>
+              <button className="button-quiet" onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}><ShieldCheck size={16} /> Official members</button>
             </div>
-            <div className="hero-proof"><span><CheckCircle2 size={15} /> Management-approved roster</span><span><Fingerprint size={15} /> IGN / UID lookup</span><span><LockKeyhole size={15} /> Secure accounts</span></div>
+            <div className="hero-proof"><span><CheckCircle2 size={15} /> {members.length} approved member profiles</span><span><Fingerprint size={15} /> IGN / UID / SMode lookup</span><span><LockKeyhole size={15} /> Management verified</span></div>
           </div>
           <div className="hero-emblem" aria-label="Asylum Community emblem"><div className="emblem-halo" /><img src="/resources/asylum-community-logo.jpg" alt="Asylum Community red emblem" /><div className="emblem-caption"><span className="caption-dot" /> ASYLUM COMMUNITY <span className="caption-rule" /></div></div>
-          <div className="hero-bottom"><span>BUILT FOR THE COMMUNITY</span><span>EST. ASY • OFFICIAL DIRECTORY</span><span>SCROLL TO EXPLORE ↓</span></div>
+          <div className="hero-bottom"><span>BUILT FOR THE COMMUNITY</span><span>MEMBERS • RECRUITMENT • JERSEY DROP</span><span>SCROLL TO EXPLORE ↓</span></div>
+        </section>
+
+
+        <section className="network-section section-wrap" id="community-network" aria-labelledby="network-title">
+          <div className="network-heading">
+            <div><div className="section-kicker">01 / THE ASYLUM NETWORK</div><h2 id="network-title">Three ways to <span>belong.</span></h2><p>Everything in one place. Pick where you want to go—each experience opens its own official website.</p></div>
+            <div className="network-heading-mark"><Orbit size={22} /><span>ASYLUM NETWORK / 003</span></div>
+          </div>
+          <div className="network-grid">
+            <button className="network-card network-card-home" type="button" onClick={() => { setActiveTab('Members'); scrollTo('directory'); }}>
+              <span className="network-card-top"><span className="network-index">01 / OFFICIAL</span><span className="network-current"><span className="tiny-dot" /> YOU'RE HERE</span></span>
+              <span className="network-card-icon"><ShieldCheck size={26} /></span>
+              <span className="network-card-title">Official <em>Members</em></span>
+              <span className="network-card-description">Verify community members by IGN, UID, or Streamer Mode ID. See management-approved profiles in the official directory.</span>
+              <span className="network-card-action">View member directory <ArrowUpRight size={18} /></span>
+            </button>
+            <a className="network-card network-card-recruitment" href="https://asylum-community-recruitment-sigma.vercel.app/" target="_blank" rel="noopener noreferrer">
+              <span className="network-card-top"><span className="network-index">02 / RECRUITMENT</span><span className="network-external"><ExternalLink size={15} /></span></span>
+              <span className="network-card-icon"><Swords size={26} /></span>
+              <span className="network-card-title">Join the <em>Squad</em></span>
+              <span className="network-card-description">Apply to ASYLUM Community through Direct or Referral Application. Follow your recruitment steps on the dedicated site.</span>
+              <span className="network-card-action">Open recruitment <ArrowUpRight size={18} /></span>
+            </a>
+            <a className="network-card network-card-jersey" href="https://asylum-jersey-nu.vercel.app/" target="_blank" rel="noopener noreferrer">
+              <span className="network-card-top"><span className="network-index">03 / OFFICIAL MERCH</span><span className="network-external"><ExternalLink size={15} /></span></span>
+              <span className="network-card-icon"><Shirt size={26} /></span>
+              <span className="network-card-title">The Jersey <em>Drop</em></span>
+              <span className="network-card-description">Explore the official ASYLUM jersey collection. Choose a design and continue to the existing order form.</span>
+              <span className="network-card-action">Explore jerseys <ArrowUpRight size={18} /></span>
+            </a>
+          </div>
+          <div className="network-assurance"><Globe2 size={16} /><span>One official community. Three connected destinations. Recruitment applications and jersey orders stay on their own secure sites.</span></div>
         </section>
 
         {notice && <div className={'site-notice ' + notice.kind} role="status">{notice.text}<button onClick={() => setNotice(null)} aria-label="Dismiss notice"><X size={16} /></button></div>}
 
         <section className="verify-section section-wrap" id="verify">
-          <div className="section-kicker">01 / MEMBER LOOKUP</div>
+          <div className="section-kicker">02 / MEMBER LOOKUP</div>
           <div className="verify-layout">
-            <div className="section-intro"><h2>Check the name.<br /><span>Confirm the identity.</span></h2><p>Search approved Asylum members using their IGN, UID, or team. Applications remain private until management approves them.</p><div className="notice"><ShieldCheck size={18} /><span>The directory displays approved member records only. A missing result alone does not prove an account is fake.</span></div></div>
+            <div className="section-intro"><h2>Check the name.<br /><span>Confirm the identity.</span></h2><p>Search approved Asylum members using their IGN, UID, Streamer Mode ID, or team. Applications remain private until management approves them.</p><div className="notice"><ShieldCheck size={18} /><span>The directory displays approved member records only. A missing result alone does not prove an account is fake.</span></div></div>
             <form className="search-card" onSubmit={e => { e.preventDefault(); scrollTo('directory'); }}>
-              <label htmlFor="member-search">SEARCH OFFICIAL DIRECTORY</label><div className="search-field"><Search size={19} /><input id="member-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Enter IGN, UID, or team..." /><button type="submit" aria-label="Search directory"><ArrowUpRight size={19} /></button></div>
-              <div className="search-meta"><span><span className="tiny-dot" /> Live directory</span><span>IGN / UID / TEAM</span></div>
+              <label htmlFor="member-search">SEARCH OFFICIAL DIRECTORY</label><div className="search-field"><Search size={19} /><input id="member-search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Enter IGN, UID, or Streamer ID..." /><button type="submit" aria-label="Search directory"><ArrowUpRight size={19} /></button></div>
+              <div className="search-meta"><span><span className="tiny-dot" /> Live directory</span><span>IGN / UID / SMODE</span></div>
             </form>
           </div>
         </section>
 
         <section className="directory-section section-wrap" id="directory">
-          <div className="directory-heading"><div><div className="section-kicker">02 / EXPLORE ASYLUM</div><h2>The community <span>directory.</span></h2></div><div className="preview-label"><span /> {members.length} APPROVED MEMBERS</div></div>
+          <div className="directory-heading"><div><div className="section-kicker">03 / VERIFIED COMMUNITY</div><h2>Our official <span>members.</span></h2></div><div className="preview-label"><span /> {members.length} APPROVED MEMBERS</div></div>
           <div className="tabs" role="tablist" aria-label="Directory categories">
-            {[{ name: 'Members', icon: Users }, { name: 'Teams', icon: Swords }, { name: 'Management', icon: Crown }].map(({ name, icon: Icon }) => <button key={name} role="tab" aria-selected={activeTab === name} className={activeTab === name ? 'tab active' : 'tab'} onClick={() => setActiveTab(name)}><Icon size={17} /> {name} <span className="tab-arrow">↗</span></button>)}
+            {[{ name: 'Members', icon: Users }, { name: 'Management', icon: Crown }].map(({ name, icon: Icon }) => <button key={name} role="tab" aria-selected={activeTab === name} className={activeTab === name ? 'tab active' : 'tab'} onClick={() => setActiveTab(name)}><Icon size={17} /> {name} <span className="tab-arrow">↗</span></button>)}
           </div>
           {activeTab === 'Members' && <div className="member-grid">
             {results.map(member => <article className="member-card" key={member.id}>
@@ -361,15 +389,14 @@ function App() {
               {isAdmin && <label className="photo-upload-control">{member.photo_url ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadDirectoryPhoto(member, file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label>}
               <div className="member-foot"><span><Activity size={14} /> Official record</span><span className="card-arrow"><ArrowUpRight size={17} /></span></div>
             </article>)}
-            {results.length === 0 && <div className="empty-state"><Search size={25} /><h3>{query.trim() ? 'No matching members' : 'The roster is waiting'}</h3><p>{query.trim() ? 'Try another IGN, UID, or team. A missing result does not prove someone is fake.' : 'No approved members are listed yet. Apply to join and management can review your details.'}</p><button onClick={() => { setQuery(''); setAuthMode('signup'); setShowAuth(true); scrollTo('account'); }}>Apply to join</button></div>}
+            {results.length === 0 && <div className="empty-state"><Search size={25} /><h3>{query.trim() ? 'No matching members' : 'The roster is waiting'}</h3><p>{query.trim() ? 'Try another IGN, UID, Streamer ID, or team. A missing result does not prove someone is fake.' : 'No approved members are listed yet. Apply to join and management can review your details.'}</p><button onClick={() => { setQuery(''); setAuthMode('signup'); setShowAuth(true); scrollTo('account'); }}>Apply to join</button></div>}
           </div>}
-          {activeTab === 'Teams' && <div className="team-grid">{teams.map((team, index) => <article className="team-card" key={team.name}><div className="team-number">0{index + 1}</div><div className="team-icon"><Swords size={23} /></div><span className="team-type">{team.type}</span><h3>{team.name}</h3><p>{team.description}</p><div className="team-footer">TEAM DIRECTORY <ArrowUpRight size={16} /></div></article>)}</div>}
           {activeTab === 'Management' && <><div className="management-list">{managementRoles.map((item, index) => <article className="management-row" key={item.role}><div className="management-index">0{index + 1}</div><div className="management-icon">{index === 0 ? <Crown /> : index === 1 ? <ShieldCheck /> : <Users />}</div><div className="management-copy"><h3>{item.role}</h3><p>{item.description}</p></div><span className="management-tag">ROLE CATEGORY</span></article>)}</div>{isAdmin && <div className="management-profile-editor"><div className="management-profile-preview">{managementPhotoUrl ? <img src={managementPhotoUrl} alt="Your management profile" /> : <span><Crown size={22} /></span>}<div><strong>Your management profile</strong><small>{session?.user.email} · {currentRole}</small></div></div><label className="photo-upload-control">{managementPhotoUrl ? 'Change your management photo' : 'Upload your management photo'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadManagementPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label>{currentRole === 'owner' && adminAccounts.length > 0 && <div className="management-people-list">{adminAccounts.map(account => <div className="management-person" key={account.user_id}>{account.photo_url ? <img src={account.photo_url} alt={account.email || 'Management profile'} /> : <span><Users size={18} /></span>}<div><strong>{account.email || 'Management member'}</strong><small>{account.role}</small></div></div>)}</div>}</div>}</>}
           <div className="directory-disclaimer"><LockKeyhole size={16} /><p>Only approved profiles are displayed here. Management controls member approvals and official directory records.</p></div>
         </section>
 
         <section className="account-section section-wrap" id="account">
-          <div className="section-kicker">03 / MEMBER ACCESS</div><div className="account-layout">
+          <div className="section-kicker">04 / MEMBER ACCESS</div><div className="account-layout">
             <div className="section-intro"><h2>Your place in<br /><span>Asylum Community.</span></h2><p>Register with your IGN and UID, upload a profile picture, and wait for management approval before your profile appears publicly.</p><div className="notice"><ShieldCheck size={18} /><span>Your email and account details stay private. Only approved profile information appears in the directory.</span></div></div>
             <div className="account-card">
               {!session || showAuth ? <>
@@ -397,7 +424,7 @@ function App() {
         </section>
 
         {isAdmin && <section className="admin-section section-wrap" id="admin-panel">
-          <div className="directory-heading"><div><div className="section-kicker">04 / PRIVATE MANAGEMENT</div><h2>Membership <span>applications.</span></h2></div><div className="preview-label"><span /> ADMIN ACCESS</div></div>
+          <div className="directory-heading"><div><div className="section-kicker">05 / PRIVATE MANAGEMENT</div><h2>Membership <span>applications.</span></h2></div><div className="preview-label"><span /> ADMIN ACCESS</div></div>
           <p className="admin-intro">Approve an application to publish the member profile in the official directory. Rejected and pending applications stay out of the public roster.</p>
           <div className="application-list">
             {applications.filter(item => item.status === 'pending').map(item => <article className="application-card" key={item.id}>
@@ -418,7 +445,7 @@ function App() {
 
         <section className="bottom-cta"><div className="cta-mark"><ShieldCheck size={24} /></div><div><div className="section-kicker">BUILT AROUND TRUST</div><h2>Official means <span>confirmed.</span></h2><p>Keep the directory accurate, clear, and managed by authorized people.</p></div><button className="button-primary" onClick={() => { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); }}>Join Asylum <ArrowUpRight size={17} /></button></section>
       </main>
-      <footer className="footer"><a className="footer-brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>ASYLUM <span>COMMUNITY</span></a><span>COMMUNITY • OFFICIAL MEMBERS • MANAGEMENT</span><span>© {new Date().getFullYear()} ASYLUM COMMUNITY · OFFICIAL DIRECTORY</span></footer>
+      <footer className="footer"><a className="footer-brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>ASYLUM <span>COMMUNITY</span></a><span>MEMBERS • RECRUITMENT • JERSEY DROP</span><span>© {new Date().getFullYear()} ASYLUM COMMUNITY · OFFICIAL DIRECTORY</span></footer>
     </div>
   );
 }
