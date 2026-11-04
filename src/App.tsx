@@ -327,12 +327,9 @@ function App() {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Use a JPG, PNG, or WebP under 5 MB.');
     setBusy(true); setNotice(null);
     try {
-      const path = 'members/' + member.id + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-      const { error } = await supabase.storage.from('community-photos').upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data } = supabase.storage.from('community-photos').getPublicUrl(path);
-      await dashboard('photo', { body: { kind: 'member', member_id: member.id, photo_url: data.publicUrl } });
-      setMembers(current => current.map(item => item.id === member.id ? { ...item, photo_url: data.publicUrl } : item));
+      const publicUrl = await uploadPortalImage(file, 'member');
+      await dashboard('photo', { body: { kind: 'member', member_id: member.id, photo_url: publicUrl } });
+      setMembers(current => current.map(item => item.id === member.id ? { ...item, photo_url: publicUrl } : item));
       setNotice({ kind: 'success', text: 'Profile picture updated.' });
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to upload picture.' }); }
     finally { setBusy(false); }
@@ -343,12 +340,9 @@ function App() {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Use a JPG, PNG, or WebP under 5 MB.');
     setBusy(true); setNotice(null);
     try {
-      const path = 'management/' + session.user.id + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-      const { error } = await supabase.storage.from('community-photos').upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data } = supabase.storage.from('community-photos').getPublicUrl(path);
-      await dashboard('photo', { body: { kind: 'admin', photo_url: data.publicUrl } });
-      setManagementPhotoUrl(data.publicUrl);
+      const publicUrl = await uploadPortalImage(file, 'management');
+      await dashboard('photo', { body: { kind: 'admin', photo_url: publicUrl } });
+      setManagementPhotoUrl(publicUrl);
       setNotice({ kind: 'success', text: 'Management profile picture saved.' });
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save photo.' }); }
     finally { setBusy(false); }
