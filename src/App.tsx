@@ -84,7 +84,7 @@ function App() {
         const role = profile.admin?.role ?? null;
         setCurrentRole(role);
         setManagementPhotoUrl(profile.admin?.photo_url ?? null);
-        const admin = role === 'owner' || role === 'management' || role === 'admin';
+        const admin = role === 'owner' || role === 'management' || role === 'admin' || role === 'moderator';
         setIsAdmin(admin);
         setApplication(profile.application);
         if (role === 'owner') {
@@ -163,7 +163,7 @@ function App() {
         if (data.session) setShowAuth(false);
         setNotice({ kind: 'success', text: data.session
           ? 'Registration submitted! Your application is waiting for management approval.'
-          : 'Check your email to confirm your account, then sign in to finish your profile photo upload. Your application has been created.' });
+          : 'Check your email to confirm your account, then sign in to finish your profile photo upload. Your application will appear after you confirm your email and sign in.' });
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
