@@ -22,7 +22,7 @@ export default async function handler(req:VercelRequest,res:VercelResponse) {
     if(!['application','self','member','management','showcase'].includes(kind))
       return res.status(400).json({error:'Invalid upload category.'});
     const ext: Record<string,string>={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};
-    if(!Object.hasOwn(ext,contentType)||!Number.isInteger(bytes)||bytes<100||bytes>5*1024*1024)
+    if(!Object.prototype.hasOwnProperty.call(ext,contentType)||!Number.isInteger(bytes)||bytes<100||bytes>5*1024*1024)
       return res.status(400).json({error:'Upload a JPEG, PNG or WebP picture under 5 MB.'});
     if(['member','management','showcase'].includes(kind)){
       const staff=await sql`SELECT role FROM community_admins WHERE user_id=${user.id}::uuid LIMIT 1`;
