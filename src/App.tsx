@@ -47,7 +47,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [logoBoost, setLogoBoost] = useState(false);
-  const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signup');
+  const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signin');
   const [showAuth, setShowAuth] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentRole, setCurrentRole] = useState<AdminRole | null>(null);
@@ -237,7 +237,7 @@ function App() {
     event.preventDefault(); setBusy(true); setNotice(null);
     try {
       if (!import.meta.env.VITE_NEON_AUTH_URL)
-        throw new Error('Neon Auth preview URL is not configured. Please contact management.');
+        throw new Error('Official Neon Auth is not configured for this deployment. Please contact management.');
       const normalizedEmail = email.trim().toLowerCase();
       if (authMode === 'signup') {
         const cleanName = displayName.trim(), cleanIgn = ign.trim(), cleanUid = uid.trim(), cleanStreamerId = streamerModeId.trim();
@@ -774,12 +774,12 @@ function App() {
                   <button className="button-primary form-submit auth-neon-submit" type="submit" disabled={busy}>{busy ? 'Securing your session…' : authMode === 'signup' ? 'Create ASYLUM profile' : 'Access community'} <ArrowUpRight size={17} /></button>
                 </form>}
                 {authMode === 'signup' && !recoveryMode && !confirmationEmail && <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}><ShieldCheck size={15} /> Already registered but need to verify? Send code</button>}
-                {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Forgot your password?</button>}
+                {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Activate existing Neon account / Set password</button>}
                 {recoveryMode && <div className="asy-recovery-panel">
                   {recoveryMode === 'request'
                     ? <form className="asy-recovery-form" onSubmit={requestPasswordResetCode}>
-                        <h4><LockKeyhole size={19}/> Reset your password</h4>
-                        <p>Enter the email of your Neon Auth account. Only the owner of that email can use the verification code. This does not reset old Supabase passwords.</p>
+                        <h4><LockKeyhole size={19}/> Activate or recover your Neon account</h4>
+                        <p>Use the email registered with ASYLUM. A verification code sent by Neon lets you set a new Neon-only password. Your existing IGN, membership and staff role stay in Neon; no Recruitment account is changed.</p>
                         <label htmlFor="recovery-email">REGISTERED EMAIL</label>
                         <input id="recovery-email" type="email" autoComplete="email" required maxLength={256} value={recoveryEmail} onChange={event => setRecoveryEmail(event.target.value)} placeholder="you@example.com"/>
                         <button type="submit" className="button-primary form-submit" disabled={recoveryBusy}>{recoveryBusy ? 'Requesting code…' : 'Send password reset code'} <ArrowRight size={17}/></button>

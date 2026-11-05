@@ -83,9 +83,15 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     setBusy(user.user_id); setNotice(null);
     try {
       await accountApi('user_role', { user_id: user.user_id, role: nextRole });
-      setAccounts(current => current.map(item => item.user_id === user.user_id ? { ...item, role: nextRole as PortalUser['role'] } : item));
+      const latest = await accountApi<PortalUser[]>('users');
+      setAccounts(latest);
+      setDraftRoles(Object.fromEntries(latest.map(item => [item.user_id, item.role])));
+      const persisted = latest.find(item => item.user_id === user.user_id);
+      if (!persisted || persisted.role !== nextRole) {
+        throw new Error('Neon has not confirmed the requested role change. No success was assumed.');
+      }
       onRoleUpdated?.();
-      setNotice({ type: 'success', message: `Role updated for ${user.ign || user.display_name}.` });
+      setNotice({ type: 'success', message: `Role saved and verified for ${user.ign || user.display_name}.` });
     } catch (error) {
       setDraftRoles(current => ({ ...current, [user.user_id]: user.role }));
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not save role.' });
@@ -103,8 +109,14 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     setBusy(user.user_id); setNotice(null);
     try {
       await accountApi('user_status', { user_id: user.user_id, portal_status: nextStatus });
-      setAccounts(current => current.map(item => item.user_id === user.user_id ? { ...item, portal_status: nextStatus } : item));
-      setNotice({ type: 'success', message: `Account marked ${nextStatus}. Existing records are preserved.` });
+      const latest = await accountApi<PortalUser[]>('users');
+      setAccounts(latest);
+      setDraftRoles(Object.fromEntries(latest.map(item => [item.user_id, item.role])));
+      const persisted = latest.find(item => item.user_id === user.user_id);
+      if (!persisted || persisted.portal_status !== nextStatus) {
+        throw new Error('Neon did not confirm the requested account status. Refresh and check the record.');
+      }
+      setNotice({ type: 'success', message: `Account marked ${nextStatus} and verified in Neon.` });
     } catch (error) {
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not change account status.' });
     } finally { setBusy(null); }
