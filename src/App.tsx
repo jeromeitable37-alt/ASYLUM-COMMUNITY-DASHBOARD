@@ -848,14 +848,21 @@ function App() {
                   {notice?.kind === 'error' && <div className="auth-error-inline" role="alert"><X size={14} /> {notice.text}</div>}
                   <button className="button-primary form-submit auth-neon-submit" type="submit" disabled={busy}>{busy ? 'Securing your session…' : authMode === 'signup' ? 'Create ASYLUM profile' : 'Access community'} <ArrowUpRight size={17} /></button>
                 </form>}
-                {authMode === 'signup' && !recoveryMode && !confirmationEmail && <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}><ShieldCheck size={15} /> Already registered but need to verify? Send code</button>}
-                {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Activate existing Neon account / Set password</button>}
+                {authMode === 'signup' && !recoveryMode && !confirmationEmail && <>
+                  <button type="button" className="asy-recovery-link" onClick={beginStaffActivation}>
+                    <UserRoundCog size={15} /> Existing Management/Admin? Re-register staff login (no member form)
+                  </button>
+                  <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}>
+                    <ShieldCheck size={15} /> Already registered but need to verify? Send code
+                  </button>
+                </>}
+                {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Forgot password? Reset Neon password</button>}
                 {authMode === 'signin' && !recoveryMode && !confirmationEmail && <>
                   <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}>
                     <ShieldCheck size={15}/> Verify an existing Neon login
                   </button>
                   <button type="button" className="asy-recovery-link" onClick={beginStaffActivation}>
-                    <UserRoundCog size={15}/> Existing Management/Admin without Neon login? Activate
+                    <UserRoundCog size={15}/> Re-register Management/Admin login (existing staff only)
                   </button>
                 </>}
                 {recoveryMode && <div className="asy-recovery-panel asy-auth-step">
@@ -865,7 +872,7 @@ function App() {
                           <span className="asy-auth-step-symbol"><LockKeyhole size={21}/></span>
                           <div>
                             <span className="asy-auth-step-eyebrow">ACCOUNT RECOVERY</span>
-                            <h4>Activate or reset password</h4>
+                            <h4>Reset your Neon password</h4>
                             <p className="asy-auth-step-description">Use your registered ASYLUM email to request a verification code.</p>
                           </div>
                         </div>
@@ -885,9 +892,9 @@ function App() {
                         <div className="asy-auth-step-heading">
                           <span className="asy-auth-step-symbol"><ShieldCheck size={21}/></span>
                           <div>
-                            <span className="asy-auth-step-eyebrow">STAFF ACCOUNT ACTIVATION</span>
-                            <h4>Activate your Neon login</h4>
-                            <p className="asy-auth-step-description">For existing Management/Admin staff who do not yet have a Neon login. Use your original registered email; this will not create another membership application.</p>
+                            <span className="asy-auth-step-eyebrow">MANAGEMENT / ADMIN RE-REGISTRATION</span>
+                            <h4>Re-register your staff login</h4>
+                            <p className="asy-auth-step-description">For existing Management/Admin only. Use your original registered email and create a new Neon login. Your existing Dashboard role will remain preserved, and this will not submit a new member application.</p>
                           </div>
                         </div>
                         <div className="asy-auth-field">
@@ -911,7 +918,7 @@ function App() {
                             placeholder="Repeat your new password"/>
                         </div>
                         <button className="button-primary form-submit asy-auth-action" type="submit" disabled={recoveryBusy}>
-                          {recoveryBusy ? 'Activating…' : 'Create my Neon login'} <ArrowRight size={17}/>
+                          {recoveryBusy ? 'Registering…' : 'Register my staff login'} <ArrowRight size={17}/>
                         </button>
                         <small className="asy-auth-field-help">Verify your email afterward. Owner approval is required to link your existing role.</small>
                       </form>
