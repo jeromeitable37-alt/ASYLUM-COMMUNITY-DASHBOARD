@@ -47,6 +47,35 @@ export async function readVerifiedBrowserSession(): Promise<PortalSession | null
 }
 
 
+
+/**
+ * Use the official Better Auth Email OTP endpoints through the first-party
+ * gateway. Some Neon SDK versions implement resetPassword with an incorrect
+ * route. Never send the password or OTP to logs or non-Neon services.
+ */
+async function postNeonPasswordReset(path: 'request-password-reset' | 'reset-password', payload: object) {
+  const response = await fetch('/api/neon-auth/email-otp/' + path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json().catch(() => null) as { error?: {message?: string} | string; message?: string } | null;
+  if (!response.ok) {
+    throw new Error(typeof result?.error === 'string' ? result.error :
+      result?.error?.message || result?.message || 'Neon password reset request could not be completed.');
+  }
+}
+
+export async function requestNeonPasswordResetCode(email: string) {
+  await postNeonPasswordReset('request-password-reset', { email });
+}
+
+export async function finishNeonPasswordReset(email: string, otp: string, password: string) {
+  await postNeonPasswordReset('reset-password', { email, otp, password });
+}
+
 export function savePendingRegistration(draft: {
   email: string; display_name: string; ign: string; uid: string; streamer_mode_id: string;
 }) {

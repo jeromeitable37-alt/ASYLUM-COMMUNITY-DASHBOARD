@@ -4,7 +4,7 @@ import {
   Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
   LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
-import { neonEmailAuth, readVerifiedBrowserSession, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
+import { neonEmailAuth, readVerifiedBrowserSession, requestNeonPasswordResetCode, finishNeonPasswordReset, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
 import type { PortalSession } from './lib/portal-auth';
 import { uploadPortalImage } from './lib/portal-images';
 import { readApiEnvelope } from './lib/read-api';
@@ -345,11 +345,10 @@ function App() {
     }
     setRecoveryBusy(true); setNotice(null);
     try {
-      const result = await neonEmailAuth.emailOtp.requestPasswordReset({email:address});
-      if (result.error) throw new Error(result.error.message || 'Unable to request a password-reset code.');
+      await requestNeonPasswordResetCode(address);
       setRecoveryEmail(address);
       setRecoveryMode('verify');
-      setNotice({kind:'info',text:'If this email belongs to a Neon Auth account, a one-time reset code has been requested. Check Inbox and Spam. This cannot reset an old Supabase password.'});
+      setNotice({kind:'info',text:'If eligible, a one-time code has been requested through Neon Auth. Check Inbox and Spam. This is only for your Official Dashboard account.'});
     } catch (error) {
       // Never expose whether the address belongs to another user.
       setNotice({kind:'error',text:error instanceof Error && /origin/i.test(error.message)
@@ -371,10 +370,7 @@ function App() {
     }
     setRecoveryBusy(true); setNotice(null);
     try {
-      const result = await neonEmailAuth.emailOtp.resetPassword({
-        email:recoveryEmail.trim().toLowerCase(),otp:recoveryCode.trim(),password:recoveryPassword,
-      });
-      if (result.error) throw new Error(result.error.message || 'Reset code was invalid or expired.');
+      await finishNeonPasswordReset(recoveryEmail.trim().toLowerCase(), recoveryCode.trim(), recoveryPassword);
       setRecoveryMode(null);
       setEmail(recoveryEmail.trim().toLowerCase());
       setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm('');
