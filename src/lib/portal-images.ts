@@ -1,13 +1,11 @@
-import { portalAuth } from './portal-auth';
+import { getNeonBearer } from './portal-auth';
 
 const validImages = ['image/jpeg', 'image/png', 'image/webp'];
 
 export async function uploadPortalImage(file: File, kind: 'application' | 'self' | 'member' | 'management' | 'showcase') {
   if (!validImages.includes(file.type)) throw new Error('Use a JPEG, PNG or WebP image.');
   if (file.size < 100 || file.size > 5 * 1024 * 1024) throw new Error('Image must be under 5 MB.');
-  const sessionResult = await portalAuth.getSession();
-  const token = sessionResult.data.session?.access_token;
-  if (!token) throw new Error('Please sign in to upload an image.');
+  const token = await getNeonBearer();
   const signed = await fetch('/api/photo-upload', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
