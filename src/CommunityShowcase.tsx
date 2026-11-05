@@ -6,7 +6,7 @@ import {
   Search, Shield, ShieldCheck, Shirt, Sparkles, Swords, Trash2, Trophy, Upload,
   Users, X,
 } from 'lucide-react';
-import { portalAuth } from './lib/portal-auth';
+import { getNeonBearer } from './lib/portal-auth';
 import { readApiEnvelope } from './lib/read-api';
 import { uploadPortalImage } from './lib/portal-images';
 import './community-showcase.css';
@@ -70,7 +70,7 @@ function Initials({ name }: { name: string }) {
   return <span className="asy-photo-fallback" aria-hidden="true">{name.trim().split(/\s+/).slice(0, 2).map(x => x[0]).join('').toUpperCase() || 'ASY'}</span>;
 }
 async function showApi<T>(action: string, body?: Record<string, unknown>): Promise<T> {
-  const token = body ? (await portalAuth.getSession()).data.session?.access_token : undefined;
+  const token = body ? await getNeonBearer() : undefined;
   const res = await fetch('/api/showcase?action=' + encodeURIComponent(action), {
     method: body ? 'POST' : 'GET',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
