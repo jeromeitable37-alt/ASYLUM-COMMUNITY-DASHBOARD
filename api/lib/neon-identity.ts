@@ -44,7 +44,10 @@ export async function requirePortalIdentity(req: VercelRequest, sql: Sql): Promi
   try {
     const { payload } = await jwtVerify(bearer, jwks(keyUrl), {
       algorithms: ['EdDSA'],
-      issuer: issuer.replace(/\/$/, ''),
+      // Neon Managed Better Auth signs JWTs with its scheme+host (origin),
+      // not the full branch-scoped /database/auth URL.
+      issuer: new URL(issuer).origin,
+      audience: new URL(issuer).origin,
       clockTolerance: 10,
     });
     subject = payload.sub;
