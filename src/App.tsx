@@ -284,31 +284,32 @@ function App() {
           throw new Error('Neon accepted the sign-in but no first-party session was created. Your account is safe; please contact management if this persists.');
         }
         const currentUser = verified.user;
+        // Lookup must precede any registration draft replay. Existing Owner/
+        // Admin accounts must not be modified by a stale sign-up draft.
+        const profile = await dashboard<{
+          application: Application | null;
+          admin: { role: AdminRole } | null;
+        }>('profile');
         const draft = readPendingRegistration();
         if (draft && draft.email.toLowerCase() === normalizedEmail) {
-          try {
-            await dashboard('bootstrap', {body:{
-              display_name:draft.display_name,ign:draft.ign,uid:draft.uid,
-              streamer_mode_id:draft.streamer_mode_id,
+          if (profile.application || profile.admin) {
+            clearPendingRegistration();
+          } else {
+            await dashboard('bootstrap', {body: {
+              display_name: draft.display_name,
+              ign: draft.ign,
+              uid: draft.uid,
+              streamer_mode_id: draft.streamer_mode_id,
             }});
             clearPendingRegistration();
             if (photoFile) {
               await uploadPhoto(currentUser.id, photoFile);
               setPhotoFile(null);
             }
-          } catch (profileError) {
-            if (profileError instanceof Error && /verify your Neon Auth email/i.test(profileError.message)) {
-              setConfirmationEmail(normalizedEmail);
-              setShowAuth(true);
-              setNotice({kind:'error',text:profileError.message});
-              return;
-            }
-            throw profileError;
           }
         }
-        // The authenticated Dashboard API must also accept the canonical
-        // account mapping before a successful sign-in is displayed.
-        await dashboard('profile');
+        // Only show authenticated UI after the server has confirmed the
+        // canonical Dashboard profile and its authorized account mapping.
         setSession(verified);
         setPassword('');
         setConfirmationEmail(null);
