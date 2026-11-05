@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
-  Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
+  Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint, UserRoundCog,
   LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
 import { neonEmailAuth, readVerifiedBrowserSession, requestNeonPasswordResetCode, finishNeonPasswordReset, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
@@ -62,7 +62,7 @@ function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [recoveryMode, setRecoveryMode] = useState<'request' | 'verify' | null>(null);
+  const [recoveryMode, setRecoveryMode] = useState<'request' | 'verify' | 'staff' | null>(null);
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [recoveryPassword, setRecoveryPassword] = useState('');
@@ -333,6 +333,55 @@ function App() {
     setRecoveryCode(''); setRecoveryPassword(''); setRecoveryConfirm('');
     setPassword('');
     setNotice(null);
+  };
+
+  const beginStaffActivation = () => {
+    setAuthMode('signin');
+    setRecoveryMode('staff');
+    setRecoveryEmail(email.trim());
+    setRecoveryPassword('');
+    setRecoveryConfirm('');
+    setRecoveryCode('');
+    setConfirmationEmail(null);
+    setNotice(null);
+  };
+
+  const activateExistingStaff = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (recoveryBusy) return;
+    const address = recoveryEmail.trim().toLowerCase();
+    if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(address)) {
+      setNotice({kind:'error',text:'Enter your existing ASYLUM staff email.'});
+      return;
+    }
+    if (recoveryPassword.length < 8 || recoveryConfirm !== recoveryPassword) {
+      setNotice({kind:'error',text:'Set a password with at least 8 characters and confirm it.'});
+      return;
+    }
+    setRecoveryBusy(true);
+    setNotice(null);
+    try {
+      // Creates only a Neon Auth credential; no membership application, staff
+      // role or Dashboard identity is created or modified here.
+      const {error} = await neonEmailAuth.signUp.email({
+        email:address,password:recoveryPassword,name:'ASYLUM Staff',
+      });
+      if (error) throw new Error('Activation could not be completed. If this login already exists, use Verify email or Reset password instead.');
+      setRecoveryPassword('');setRecoveryConfirm('');
+      setRecoveryMode(null);setAuthMode('signin');
+      setConfirmationEmail(address);setEmail(address);
+      try {
+        const sent = await neonEmailAuth.emailOtp.sendVerificationOtp({
+          email:address,type:'email-verification',
+        });
+        if (sent.error) throw new Error('Email delivery failed.');
+        setNotice({kind:'info',text:'Your Neon login was created. A verification code was requested; check Inbox/Spam for Neon Auth mail. After verification, the Owner must link it to your existing staff role. No new member application was made.'});
+      } catch {
+        setNotice({kind:'error',text:'Your Neon login was created, but the verification email could not be confirmed. Use Resend code after email delivery is configured. Do not create another account.'});
+      }
+    } catch {
+      setNotice({kind:'error',text:'Unable to activate this Neon login. Existing users should use Verify email / Reset password; if you are an existing staff member, ask the Owner to check your activation status.'});
+    } finally {setRecoveryBusy(false);}
   };
 
   const requestPasswordResetCode = async (event: FormEvent<HTMLFormElement>) => {
@@ -801,6 +850,14 @@ function App() {
                 </form>}
                 {authMode === 'signup' && !recoveryMode && !confirmationEmail && <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}><ShieldCheck size={15} /> Already registered but need to verify? Send code</button>}
                 {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Activate existing Neon account / Set password</button>}
+                {authMode === 'signin' && !recoveryMode && !confirmationEmail && <>
+                  <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}>
+                    <ShieldCheck size={15}/> Verify an existing Neon login
+                  </button>
+                  <button type="button" className="asy-recovery-link" onClick={beginStaffActivation}>
+                    <UserRoundCog size={15}/> Existing Management/Admin without Neon login? Activate
+                  </button>
+                </>}
                 {recoveryMode && <div className="asy-recovery-panel asy-auth-step">
                   {recoveryMode === 'request'
                     ? <form className="asy-recovery-form asy-auth-step-form" onSubmit={requestPasswordResetCode}>
@@ -822,6 +879,41 @@ function App() {
                         <button type="submit" className="button-primary form-submit asy-auth-action" disabled={recoveryBusy}>
                           {recoveryBusy ? 'Requesting code…' : 'Send verification code'} <ArrowRight size={17}/>
                         </button>
+                      </form>
+                    : recoveryMode === 'staff'
+                    ? <form className="asy-recovery-form asy-auth-step-form" onSubmit={activateExistingStaff}>
+                        <div className="asy-auth-step-heading">
+                          <span className="asy-auth-step-symbol"><ShieldCheck size={21}/></span>
+                          <div>
+                            <span className="asy-auth-step-eyebrow">STAFF ACCOUNT ACTIVATION</span>
+                            <h4>Activate your Neon login</h4>
+                            <p className="asy-auth-step-description">For existing Management/Admin staff who do not yet have a Neon login. Use your original registered email; this will not create another membership application.</p>
+                          </div>
+                        </div>
+                        <div className="asy-auth-field">
+                          <label htmlFor="staff-activate-email">Existing registered email</label>
+                          <input id="staff-activate-email" type="email" required autoComplete="email"
+                            value={recoveryEmail} onChange={event=>setRecoveryEmail(event.target.value)}
+                            placeholder="name@example.com"/>
+                        </div>
+                        <div className="asy-auth-field">
+                          <label htmlFor="staff-activate-password">New Neon password</label>
+                          <input id="staff-activate-password" type="password" required minLength={8}
+                            autoComplete="new-password" value={recoveryPassword}
+                            onChange={event=>setRecoveryPassword(event.target.value)}
+                            placeholder="At least 8 characters"/>
+                        </div>
+                        <div className="asy-auth-field">
+                          <label htmlFor="staff-activate-confirm">Confirm password</label>
+                          <input id="staff-activate-confirm" type="password" required minLength={8}
+                            autoComplete="new-password" value={recoveryConfirm}
+                            onChange={event=>setRecoveryConfirm(event.target.value)}
+                            placeholder="Repeat your new password"/>
+                        </div>
+                        <button className="button-primary form-submit asy-auth-action" type="submit" disabled={recoveryBusy}>
+                          {recoveryBusy ? 'Activating…' : 'Create my Neon login'} <ArrowRight size={17}/>
+                        </button>
+                        <small className="asy-auth-field-help">Verify your email afterward. Owner approval is required to link your existing role.</small>
                       </form>
                     : <form className="asy-recovery-form asy-auth-step-form" onSubmit={finishPasswordRecovery}>
                         <div className="asy-auth-step-heading">
