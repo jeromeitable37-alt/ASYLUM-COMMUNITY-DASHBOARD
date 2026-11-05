@@ -1,4 +1,5 @@
 import type { VercelRequest } from '@vercel/node';
+import { findActiveNeonDbSession } from './neon-session.js';
 import { neonCookiesFromBrowser } from './first-party-session.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
@@ -65,6 +66,11 @@ export async function requirePortalIdentity(req: VercelRequest, sql: Sql): Promi
         throw new PortalAuthError(403, 'Cross-site account changes are not allowed.');
       }
     }
+    // First-party session is checked against Neon Auth records and expiry.
+    const dbSession = await findActiveNeonDbSession(sql, req.headers.cookie);
+    if (dbSession) {
+      subject = dbSession.userId;
+    } else {
     // Neon validates the opaque token: never trust a browser identity/role.
     const browserCookies = neonCookiesFromBrowser(req.headers.cookie);
     if (!browserCookies.cookieHeader) {
@@ -95,6 +101,7 @@ export async function requirePortalIdentity(req: VercelRequest, sql: Sql): Promi
       throw new PortalAuthError(401, 'Neon did not return an active session. Sign in to continue.');
     }
     subject = session.user.id;
+    }
   }
   if (!uuid(subject)) throw new PortalAuthError(401, 'Neon account ID is invalid.');
   // Managed Neon Auth is the source of truth for verified email ownership.

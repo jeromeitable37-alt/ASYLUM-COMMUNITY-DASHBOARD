@@ -1,4 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { neon } from '@neondatabase/serverless';
+import { findActiveNeonDbSession } from './lib/neon-session.js';
 import { neonCookiesFromBrowser, firstPartyCookiesFromNeon, FIRST_PARTY_COOKIE } from './lib/first-party-session.js';
 
 /**
@@ -53,6 +55,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (key === 'authPath') continue;
     for (const item of Array.isArray(value) ? value : [value]) {
       if (typeof item === 'string') url.searchParams.append(key, item);
+    }
+  }
+
+  // Validate first-party Neon sessions in the existing Neon Auth database.
+  // Avoid another cross-host cookie round-trip; keep token/expiry verification.
+  if (authPath === 'get-session' && method === 'GET') {
+    if (!process.env.DATABASE_URL)
+      return res.status(503).json({error:'Neon database session verification is not configured.'});
+    try {
+      const session = await findActiveNeonDbSession(neon(process.env.DATABASE_URL),req.headers.cookie);
+      if (!session) return res.status(200).json(null);
+      return res.status(200).json({
+        session:{id:session.sessionId,expiresAt:session.expiresAt},
+        user:{id:session.userId,email:session.email},
+      });
+    } catch {
+      return res.status(503).json({error:'Neon session verification is temporarily unavailable.'});
     }
   }
 
