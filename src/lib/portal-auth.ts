@@ -17,12 +17,54 @@ export const neonEmailAuth = createAuthClient(url || 'https://invalid.local', {
  * Never use the opaque session token as a Dashboard API Bearer credential.
  * This also refreshes tokens that may have expired (15-minute TTL).
  */
+/**
+ * Only signed Neon-issued JWTs are returned to Dashboard APIs. The backend
+ * verifies issuer, signature, audience, expiry and canonical account mapping.
+ * Depending on SDK/browser cookie behavior, JWTs may arrive in /token or the
+ * set-auth-jwt response header on /get-session. Never pass opaque session
+ * cookies or use a user ID/email as an authorization credential.
+ */
+function isJwt(value: unknown): value is string {
+  return typeof value === 'string' &&
+    /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(value);
+}
+
 export async function getNeonBearer(): Promise<string> {
-  const result = await neonEmailAuth.token({ fetchOptions: { credentials: 'include' } });
-  if (result.error || !result.data?.token) {
-    throw new Error('Your Neon session needs to be refreshed. Sign in again to access your Dashboard profile.');
+  // Standard managed Neon JWT plugin endpoint.
+  try {
+    const result = await neonEmailAuth.token({ fetchOptions: { credentials: 'include' } });
+    if (!result.error && isJwt(result.data?.token)) return result.data.token;
+  } catch {
+    // Session endpoint below may return the same signed JWT.
   }
-  return result.data.token;
+
+  // Neon documents a signed JWT in the getSession response's set-auth-jwt
+  // header. Some SDK versions also expose an access_token on the session.
+  let sessionJwt: string | null = null;
+  try {
+    const response = await neonEmailAuth.getSession({
+      fetchOptions: {
+        credentials: 'include',
+        onSuccess: ctx => {
+          const jwt = ctx.response.headers.get('set-auth-jwt');
+          if (isJwt(jwt)) sessionJwt = jwt;
+        },
+      },
+    });
+    if (sessionJwt) return sessionJwt;
+    const session = response.data?.session as unknown as {access_token?: unknown; accessToken?: unknown} | null;
+    if (isJwt(session?.access_token)) return session.access_token;
+    if (isJwt(session?.accessToken)) return session.accessToken;
+  } catch {
+    // Only signed JWT shapes are eligible as credentials; backend verifies.
+  }
+
+  throw new Error(
+    'Neon sign-in is present, but no usable security token was returned. ' +
+    'Your browser may be blocking cross-site Neon session cookies. ' +
+    'Try signing out and back in once. If the error remains, contact management; ' +
+    'do not register a second account.'
+  );
 }
 
 export type PortalSession = {
