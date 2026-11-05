@@ -122,7 +122,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     } finally {setBusy(null);}
   }
 
-  async function setStaffPassword(user: PortalUser) {
+  async function submitStaffPassword(user: PortalUser) {
     if (user.role === 'owner' || user.role === 'member' ||
         user.portal_status !== 'active' || !user.neon_auth_user_id) return;
     const candidate = staffPassword[user.user_id] || '';
@@ -221,7 +221,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
                 <ShieldCheck size={14}/> Link verified staff login
               </button>}
             {!isOwner && user.neon_auth_user_id && user.portal_status==='active' &&
-              <form className="asy-staff-password-form" onSubmit={event=>{event.preventDefault();void setStaffPassword(user);}}>
+              <form className="asy-staff-password-form" onSubmit={event=>{event.preventDefault();void submitStaffPassword(user);}}>
                 <label htmlFor={`staff-password-${user.user_id}`}>Owner: Set staff Neon password</label>
                 <div className="asy-staff-password-row">
                   <input id={`staff-password-${user.user_id}`} type="password" minLength={8} maxLength={128}
