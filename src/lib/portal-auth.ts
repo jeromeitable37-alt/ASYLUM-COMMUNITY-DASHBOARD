@@ -11,11 +11,8 @@ const url = typeof window !== 'undefined'
 if (!url) console.error('Neon Auth client URL is not configured.');
 // One native Neon Better Auth client for login, sessions and JWTs.
 // Do not mix a Supabase-compatible adapter session with a native JWT client.
-export const neonEmailAuth = createAuthClient(url || 'https://invalid.local', {
-  // All Neon session and JWT requests must include the cross-origin auth cookie.
-  // Configuring this on the client (not only on token()) keeps both in sync.
-  fetchOptions: { credentials: 'include' },
-});
+// Same-origin auth gateway: normal browser credentials work without third-party cookies.
+export const neonEmailAuth = createAuthClient(url || 'https://invalid.local');
 
 // Protected dashboard requests use Neon-validated first-party session cookies.
 // No raw browser JWT is required for the Owner or Member dashboard.
