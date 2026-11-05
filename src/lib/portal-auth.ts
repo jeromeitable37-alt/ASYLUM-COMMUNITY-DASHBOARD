@@ -1,13 +1,11 @@
 import { createAuthClient } from '@neondatabase/auth';
-import { SupabaseAuthAdapter } from '@neondatabase/auth/vanilla/adapters';
 
 // Only the dashboard's branch-scoped Neon Auth endpoint is used.
 // A missing URL is an error: never fall back to the shared Supabase project.
 const url = import.meta.env.VITE_NEON_AUTH_URL;
 if (!url) console.error('VITE_NEON_AUTH_URL is not configured.');
-export const portalAuth = createAuthClient(url || 'https://invalid.local', {
-  adapter: SupabaseAuthAdapter(),
-});
+// One native Neon Better Auth client for login, sessions and JWTs.
+// Do not mix a Supabase-compatible adapter session with a native JWT client.
 export const neonEmailAuth = createAuthClient(url || 'https://invalid.local');
 
 /**
@@ -24,7 +22,6 @@ export async function getNeonBearer(): Promise<string> {
 }
 
 export type PortalSession = {
-  access_token: string;
   user: { id: string; email?: string | null };
 };
 
