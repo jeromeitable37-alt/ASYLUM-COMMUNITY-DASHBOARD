@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { neonCookiesFromBrowser, firstPartyCookiesFromNeon, FIRST_PARTY_COOKIE } from './lib/first-party-session.js';
 
 /**
  * Branch-scoped, same-origin gateway for Managed Neon Auth.
@@ -57,12 +58,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const headers = new Headers();
   for (const key of [
-    'accept', 'content-type', 'origin', 'referer', 'cookie', 'user-agent',
+    'accept', 'content-type', 'origin', 'referer', 'user-agent',
     'accept-language', 'x-csrf-token', 'x-requested-with'
   ]) {
     const value = req.headers[key];
     if (typeof value === 'string') headers.set(key, value);
   }
+  const browserCookies = neonCookiesFromBrowser(req.headers.cookie);
+  if (browserCookies.cookieHeader) headers.set('cookie', browserCookies.cookieHeader);
 
   let body: string | undefined;
   if (method === 'POST' && req.body !== undefined) {
@@ -95,34 +98,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const cookies = upstream.headers.getSetCookie();
-    // Metadata only: never log passwords, tokens, cookie contents, email, or UID.
+    const browserSetCookies = firstPartyCookiesFromNeon(cookies, authPath === 'sign-out');
+    if (browserSetCookies.length) res.setHeader('Set-Cookie', browserSetCookies);
+    // Never log cookie names/values, credentials, email or identity.
     if (authPath === 'sign-in/email') {
-      console.info('Neon preview auth gateway:', {
+      console.info('Official Neon session gateway:', {
         upstreamStatus: upstream.status,
-        setCookieCount: cookies.length,
-        sameOrigin: req.headers.origin === 'https://' + req.headers.host,
+        sessionCookieIssued: browserSetCookies.some(s=>s.startsWith(FIRST_PARTY_COOKIE + '=')),
+        upstreamCookieCount: cookies.length,
       });
     }
-    if (cookies.length) {
-      // Neon sets session cookies for its own Auth endpoint. Rebase the
-      // browser session to this Vercel site's ROOT path, including when
-      // Neon omits Path entirely. Otherwise get-session can work while
-      // /api/dashboard receives no session cookie.
-      //
-      // Do not alter the signed cookie name/value, expiry, or HttpOnly/Secure.
-      // For this first-party app, SameSite=Lax is sufficient and limits CSRF.
-      const safeCookies = cookies.map(cookie => {
-        const parts = cookie.split(';').map(part => part.trim()).filter(Boolean);
-        const nameAndValue = parts.shift() || '';
-        const attributes = parts.filter(part =>
-          !/^(?:domain|path|samesite|partitioned)(?:=|$)/i.test(part));
-        const secure = attributes.some(part => /^secure$/i.test(part));
-        const httpOnly = attributes.some(part => /^httponly$/i.test(part));
-        if (!secure) attributes.push('Secure');
-        if (!httpOnly) attributes.push('HttpOnly');
-        return [nameAndValue, ...attributes, 'Path=/', 'SameSite=Lax'].join('; ');
+    if (authPath === 'get-session') {
+      console.info('Official Neon session gateway:', {
+        firstPartyCookieReceived: browserCookies.hasFirstPartySession,
+        forwardedNeonCookie: Boolean(browserCookies.cookieHeader),
+        upstreamStatus: upstream.status,
       });
-      res.setHeader('Set-Cookie', safeCookies);
     }
 
     if (method === 'HEAD' || upstream.status === 204 || upstream.status === 304) {

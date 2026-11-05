@@ -1,4 +1,5 @@
 import type { VercelRequest } from '@vercel/node';
+import { neonCookiesFromBrowser } from './first-party-session.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { NeonQueryFunction } from '@neondatabase/serverless';
 
@@ -64,23 +65,16 @@ export async function requirePortalIdentity(req: VercelRequest, sql: Sql): Promi
         throw new PortalAuthError(403, 'Cross-site account changes are not allowed.');
       }
     }
-    // Match Neon Managed Auth's documented __Secure-neonauth.session_token
-    // as well as version-specific neon-auth/better-auth prefixes.
-    // Do not forward unrelated first-party site cookies to Neon.
-    const allCookies = String(req.headers.cookie || '').split(';').map(part => part.trim()).filter(Boolean);
-    const sessionCookies = allCookies.filter(part => {
-      const name = part.split('=')[0]?.trim() || '';
-      return /^(?:__Secure-|__Host-)?(?:neonauth|neon[-_]auth|better[-_]auth)[._-]/i.test(name);
-    });
-    if (sessionCookies.length === 0) {
-      // Metadata only: no cookie values, passwords, email, or user IDs.
-      console.info('Official Neon auth session diagnostic:', {
-        receivedCookieHeader: allCookies.length > 0,
-        recognizedCookieCount: 0,
+    // Neon validates the opaque token: never trust a browser identity/role.
+    const browserCookies = neonCookiesFromBrowser(req.headers.cookie);
+    if (!browserCookies.cookieHeader) {
+      console.info('Official Neon protected API session diagnostic:', {
+        firstPartyCookieReceived: browserCookies.hasFirstPartySession,
+        anyCookieReceived: browserCookies.totalCookieCount > 0,
       });
-      throw new PortalAuthError(401, 'Neon session cookie was not attached to the Dashboard request. Sign in again after refreshing the site.');
+      throw new PortalAuthError(401, 'No first-party Dashboard session was attached. Please sign in.');
     }
-    const cookies = sessionCookies.join('; ');
+    const cookies = browserCookies.cookieHeader;
     let session: { session?: unknown; user?: { id?: unknown } } | null;
     try {
       const response = await fetch(issuer.replace(/\/$/, '') + '/get-session', {
