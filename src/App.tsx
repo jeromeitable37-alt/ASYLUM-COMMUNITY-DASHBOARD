@@ -559,6 +559,25 @@ function App() {
     finally { setBusy(false); }
   };
 
+  const migrateLegacyPhotos = async () => {
+    if (currentRole !== 'owner' || busy) return;
+    setBusy(true); setNotice(null);
+    try {
+      const response = await fetch('/api/migrate-images', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ execute: true }),
+      });
+      const result = await readApiEnvelope<{ migrated:number; failed:number }>(response);
+      setNotice({ kind: result.data.failed ? 'info' : 'success',
+        text: 'Moved ' + result.data.migrated + ' public images to Neon Storage. ' +
+          result.data.failed + ' still need review. Original public files were not deleted.' });
+      setProfileRefreshVersion(v => v+1);
+    } catch (error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to transfer public images.'});
+    } finally { setBusy(false); }
+  };
+
   const transferOwnership = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (currentRole !== 'owner' || !window.confirm('Transfer ownership to ' + transferEmail.trim() + '? You will become a Management Admin and cannot take ownership back yourself.')) return;
@@ -873,6 +892,13 @@ function App() {
           <div className="admin-records"><h3>Recent applications</h3>{applications.slice(0, 8).map(item => <div className="admin-record" key={item.id}><span>{item.ign} <small>· {item.uid}</small></span><span className={'status-text ' + item.status}>{item.status}</span></div>)}</div>
           {currentRole === 'owner' && <div className="owner-tools">
             <UserManagement currentUserId={dashboardUserId} onRoleUpdated={() => { void dashboard<AdminAccount[]>('admins').then(setAdminAccounts).catch(() => {}); }} />
+            <div className="owner-form">
+              <h3>Transfer existing profile photos to Neon Storage</h3>
+              <p>Copies only public ASYLUM images to Neon Main, updates official Neon records and leaves the old shared storage untouched.</p>
+              <button type="button" className="button-primary" disabled={busy} onClick={() => void migrateLegacyPhotos()}>
+                {busy ? 'Transferring…' : 'Move public ASYLUM photos to Neon'}
+              </button>
+            </div>
             <form className="owner-form transfer-form" onSubmit={transferOwnership}><label htmlFor="transfer-email">TRANSFER COMMUNITY OWNERSHIP</label><p>The new Owner must already have a registered account. Your account will automatically become a Management Admin after transfer.</p><input id="transfer-email" type="email" required value={transferEmail} onChange={e => setTransferEmail(e.target.value)} placeholder="newowner@example.com" /><button className="transfer-button" type="submit" disabled={busy}>Transfer ownership <Crown size={16} /></button></form>
           </div>}
         </section>}
