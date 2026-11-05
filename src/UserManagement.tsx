@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, RefreshCw, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import { readApiEnvelope } from './lib/read-api';
 import './user-management.css';
 
 export type PortalUser = {
@@ -27,9 +28,8 @@ async function accountApi<T>(action: string, payload?: Record<string, unknown>):
     headers: { Authorization: `Bearer ${session.access_token}`, ...(payload ? { 'Content-Type': 'application/json' } : {}) },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'Unable to update account.');
-  return result.data as T;
+  const result = await readApiEnvelope<T>(response, 'Unable to update account.');
+  return result.data;
 }
 
 const roleLabels: Record<PortalUser['role'], string> = {
@@ -113,8 +113,15 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     setBusy(user.user_id); setNotice(null);
     try {
       await accountApi('user_status', { user_id: user.user_id, portal_status: nextStatus });
-      setAccounts(current => current.map(item => item.user_id === user.user_id ? { ...item, portal_status: nextStatus } : item));
-      setNotice({ type: 'success', message: `Account marked ${nextStatus}. Existing records are preserved.` });
+      // Confirm Neon persisted the change before showing success to the Owner.
+      const latest = await accountApi<PortalUser[]>('users');
+      const persisted = latest.find(item => item.user_id === user.user_id);
+      setAccounts(latest);
+      setDraftRoles(Object.fromEntries(latest.map(item => [item.user_id, item.role])));
+      if (!persisted || persisted.portal_status !== nextStatus) {
+        throw new Error('Neon did not confirm the requested account status. Please refresh and check the record.');
+      }
+      setNotice({ type: 'success', message: `Account marked ${nextStatus} and confirmed in Neon. Existing records are preserved.` });
     } catch (error) {
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not change account status.' });
     } finally { setBusy(null); }

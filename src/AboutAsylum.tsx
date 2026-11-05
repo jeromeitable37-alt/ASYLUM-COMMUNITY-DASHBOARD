@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowRight, CalendarDays, CheckCircle2, Compass, Crown, Edit3, Flag, Save, ShieldCheck, Sparkles, X } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import { readApiEnvelope } from './lib/read-api';
 import './portal-upgrade.css';
 
 type About = {
@@ -40,8 +41,7 @@ export default function AboutAsylum({ isAdmin }: {isAdmin: boolean}) {
       const { data: {session} }=await supabase.auth.getSession();
       if(!session)throw new Error('Sign in as management first.');
       const r=await fetch('/api/showcase?action=about_save',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify(draft)});
-      const response=await r.json();
-      if(!r.ok)throw new Error(response.error || 'Could not save About ASYLUM.');
+      const response=await readApiEnvelope<About>(r,'Could not save About ASYLUM.');
       setAbout(response.data);setDraft(response.data);setEditing(false);setNotice('About ASYLUM updated.');
     }catch(e){setNotice(e instanceof Error?e.message:'Could not save about information.');}
     finally{setSaving(false);}

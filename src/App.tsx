@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
+import { readApiEnvelope } from './lib/read-api';
 import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
@@ -32,9 +33,8 @@ async function dashboard<T>(action: string, opts?: { body?: Record<string, unkno
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts?.body ? { 'Content-Type': 'application/json' } : {}) },
     ...(opts?.body ? { body: JSON.stringify(opts.body) } : {}),
   });
-  const output = await res.json();
-  if (!res.ok) throw new Error(output.error || 'Server request failed.');
-  return output.data as T;
+  const output = await readApiEnvelope<T>(res, 'Dashboard request could not be completed.');
+  return output.data;
 }
 
 function App() {
