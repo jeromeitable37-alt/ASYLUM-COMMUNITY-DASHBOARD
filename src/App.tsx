@@ -336,7 +336,7 @@ function App() {
   };
 
   const beginStaffActivation = () => {
-    setAuthMode('signin');
+    setAuthMode('signup');
     setRecoveryMode('staff');
     setRecoveryEmail(email.trim());
     setRecoveryPassword('');
@@ -802,7 +802,7 @@ function App() {
               <div className="auth-mood-particles" aria-hidden="true"><span /><span /><span /><span /><span /></div>
               {!session || showAuth ? <>
                 <div className="auth-overline"><Sparkles size={13} /> SECURE ASYLUM ACCESS / 2026</div>
-                <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{recoveryMode ? 'Recover your Neon account.' : authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{recoveryMode ? 'Reset your password using a code delivered to your registered email.' : authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
+                <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{recoveryMode === 'staff' ? 'Register your staff login.' : recoveryMode ? 'Recover your Neon account.' : authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{recoveryMode === 'staff' ? 'Use your existing Management/Admin email. Your current role stays unchanged.' : recoveryMode ? 'Reset your password using a code delivered to your registered email.' : authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
                 <div className="auth-switch"><button type="button" className={authMode === 'signup' && !recoveryMode ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setRecoveryMode(null); setNotice(null); }}>Register</button><button type="button" className={authMode === 'signin' && !recoveryMode ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setRecoveryMode(null); setNotice(null); }}>Sign in</button></div>
                 {!recoveryMode && confirmationEmail && <section className="asy-confirm-email asy-auth-step" aria-labelledby="asy-verify-email-heading">
                   <div className="asy-auth-step-heading">
@@ -832,6 +832,10 @@ function App() {
                     <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Back to sign in</button>
                   </div>
                 </section>}
+                {authMode === 'signup' && !recoveryMode && !confirmationEmail &&
+                  <button type="button" className="asy-recovery-link" onClick={beginStaffActivation}>
+                    <UserRoundCog size={15} /> Existing Management/Admin? Register staff login
+                  </button>}
                 {!recoveryMode && !confirmationEmail && <form className="member-form" onSubmit={submitAuth}>
                   {authMode === 'signup' && <>
                     <label htmlFor="display-name">FULL NAME</label><input id="display-name" required minLength={2} maxLength={60} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
@@ -848,23 +852,10 @@ function App() {
                   {notice?.kind === 'error' && <div className="auth-error-inline" role="alert"><X size={14} /> {notice.text}</div>}
                   <button className="button-primary form-submit auth-neon-submit" type="submit" disabled={busy}>{busy ? 'Securing your session…' : authMode === 'signup' ? 'Create ASYLUM profile' : 'Access community'} <ArrowUpRight size={17} /></button>
                 </form>}
-                {authMode === 'signup' && !recoveryMode && !confirmationEmail && <>
-                  <button type="button" className="asy-recovery-link" onClick={beginStaffActivation}>
-                    <UserRoundCog size={15} /> Existing Management/Admin? Re-register staff login (no member form)
-                  </button>
-                  <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}>
-                    <ShieldCheck size={15} /> Already registered but need to verify? Send code
-                  </button>
-                </>}
-                {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Forgot password? Reset Neon password</button>}
-                {authMode === 'signin' && !recoveryMode && !confirmationEmail && <>
-                  <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}>
-                    <ShieldCheck size={15}/> Verify an existing Neon login
-                  </button>
-                  <button type="button" className="asy-recovery-link" onClick={beginStaffActivation}>
-                    <UserRoundCog size={15}/> Re-register Management/Admin login (existing staff only)
-                  </button>
-                </>}
+                {authMode === 'signin' && !recoveryMode && !confirmationEmail &&
+                  <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}>
+                    <LockKeyhole size={15} /> Change password
+                  </button>}
                 {recoveryMode && <div className="asy-recovery-panel asy-auth-step">
                   {recoveryMode === 'request'
                     ? <form className="asy-recovery-form asy-auth-step-form" onSubmit={requestPasswordResetCode}>
