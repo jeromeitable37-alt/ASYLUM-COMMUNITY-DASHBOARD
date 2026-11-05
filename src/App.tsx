@@ -452,11 +452,13 @@ function App() {
 
   const resumeEmailVerification = async () => {
     if (resendBusy) return;
-    const address = email.trim().toLowerCase();
+    const address = (recoveryMode === 'request' ? recoveryEmail : email).trim().toLowerCase();
     if (!address || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) {
       setNotice({kind:'error',text:'Enter the email address you used to register.'});
       return;
     }
+    setRecoveryMode(null);
+    setAuthMode('signin');
     setConfirmationEmail(address);
     setPassword('');
     setNotice(null);
@@ -876,6 +878,10 @@ function App() {
                         </div>
                         <button type="submit" className="button-primary form-submit asy-auth-action" disabled={recoveryBusy}>
                           {recoveryBusy ? 'Requesting code…' : 'Send verification code'} <ArrowRight size={17}/>
+                        </button>
+                        <button type="button" className="asy-recovery-link" disabled={resendBusy}
+                          onClick={() => void resumeEmailVerification()}>
+                          <ShieldCheck size={15}/> Verify email instead
                         </button>
                       </form>
                     : recoveryMode === 'staff'
