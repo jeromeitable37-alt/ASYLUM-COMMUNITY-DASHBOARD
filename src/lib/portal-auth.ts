@@ -6,7 +6,11 @@ const url = import.meta.env.VITE_NEON_AUTH_URL;
 if (!url) console.error('VITE_NEON_AUTH_URL is not configured.');
 // One native Neon Better Auth client for login, sessions and JWTs.
 // Do not mix a Supabase-compatible adapter session with a native JWT client.
-export const neonEmailAuth = createAuthClient(url || 'https://invalid.local');
+export const neonEmailAuth = createAuthClient(url || 'https://invalid.local', {
+  // All Neon session and JWT requests must include the cross-origin auth cookie.
+  // Configuring this on the client (not only on token()) keeps both in sync.
+  fetchOptions: { credentials: 'include' },
+});
 
 /**
  * Fetch a fresh, short-lived EdDSA JWT from the verified Neon session cookie.
