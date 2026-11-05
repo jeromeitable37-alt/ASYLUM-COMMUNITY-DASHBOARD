@@ -4,7 +4,7 @@ import {
   Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
   LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
-import { portalAuth, neonEmailAuth, getNeonBearer, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
+import { neonEmailAuth, getNeonBearer, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
 import type { PortalSession } from './lib/portal-auth';
 import { uploadPortalImage } from './lib/portal-images';
 import { readApiEnvelope } from './lib/read-api';
@@ -93,10 +93,14 @@ function App() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
-    portalAuth.getSession().then(({ data }) => setSession((data.session || null) as PortalSession | null))
-      .catch(() => setSession(null));
-    const { data: listener } = portalAuth.onAuthStateChange((_event, nextSession) => setSession((nextSession || null) as PortalSession | null));
-    return () => listener.subscription.unsubscribe();
+    let mounted = true;
+    void neonEmailAuth.getSession()
+      .then(({data}) => {
+        if (mounted) setSession(data?.user
+          ? {user:{id:data.user.id,email:data.user.email}} : null);
+      })
+      .catch(() => { if (mounted) setSession(null); });
+    return () => {mounted = false;};
   }, []);
 
   useEffect(() => {
@@ -229,11 +233,13 @@ function App() {
             '. Use Resend verification code later. Do not register again.'});
         }
       } else {
-        const { data, error } = await portalAuth.signInWithPassword({ email: normalizedEmail, password });
-        if (error) throw error;
-        const current = data.session || (await portalAuth.getSession()).data.session;
-        if (!current?.user?.id) throw new Error('Neon sign-in did not establish an account session.');
-        setSession(current as PortalSession);
+        // Sign in and read the same native Neon Auth client used for JWTs.
+        const { data, error } = await neonEmailAuth.signIn.email({email: normalizedEmail, password});
+        if (error) throw new Error(error.message || 'Neon sign-in failed.');
+        const current = await neonEmailAuth.getSession();
+        const currentUser = current.data?.user || data?.user;
+        if (!currentUser?.id) throw new Error('Neon sign-in did not establish an account session.');
+        setSession({user:{id:currentUser.id,email:currentUser.email}});
         setPassword('');
         setConfirmationEmail(null);
         setShowAuth(false);
@@ -247,7 +253,7 @@ function App() {
             }});
             clearPendingRegistration();
             if (photoFile) {
-              await uploadPhoto(current.user.id, photoFile);
+              await uploadPhoto(currentUser.id, photoFile);
               setPhotoFile(null);
             }
           } catch (profileError) {
@@ -533,7 +539,7 @@ function App() {
     finally { setBusy(false); }
   };
 
-  const signOut = async () => { await portalAuth.signOut(); setSession(null); setDashboardUserId(null); setNotice({ kind: 'info', text: 'You have signed out of Neon Auth.' }); setShowAuth(false); };
+  const signOut = async () => { await neonEmailAuth.signOut(); setSession(null); setDashboardUserId(null); setNotice({ kind: 'info', text: 'You have signed out of Neon Auth.' }); setShowAuth(false); };
 
   return (
     <div className="site-shell">
