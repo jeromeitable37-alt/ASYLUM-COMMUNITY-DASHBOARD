@@ -14,6 +14,9 @@ export type PortalUser = {
   application_status: string | null;
   has_member_profile: boolean;
   has_application: boolean;
+  has_neon_login: boolean;
+  neon_verified: boolean;
+  neon_linked: boolean;
   created_at: string;
 };
 
@@ -98,6 +101,24 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     } finally { setBusy(null); }
   }
 
+  async function linkVerifiedStaff(user: PortalUser) {
+    if (user.role==='owner'||user.role==='member'||!user.neon_verified||user.neon_linked||user.portal_status!=='active') return;
+    if (!window.confirm('Link the verified Neon login for '+(user.ign||user.display_name)+
+      ' to their existing staff record? Their role will stay unchanged.')) return;
+    setBusy(user.user_id);setNotice(null);
+    try {
+      await accountApi('link_staff_neon',{user_id:user.user_id});
+      const latest=await accountApi<PortalUser[]>('users');
+      setAccounts(latest);
+      setDraftRoles(Object.fromEntries(latest.map(item=>[item.user_id,item.role])));
+      if (!latest.find(item=>item.user_id===user.user_id)?.neon_linked)
+        throw new Error('Neon did not confirm the staff login link.');
+      setNotice({type:'success',message:'Verified staff login linked. Existing role preserved.'});
+    } catch(error) {
+      setNotice({type:'error',message:error instanceof Error?error.message:'Unable to link this login.'});
+    } finally {setBusy(null);}
+  }
+
   async function changeStatus(user: PortalUser, nextStatus: PortalUser['portal_status']) {
     const isRemove = nextStatus === 'removed';
     const question = nextStatus === 'active'
@@ -157,6 +178,16 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
           </div>
           <div className="asy-user-email" title={user.email}>{user.email}</div>
           <div className="asy-user-tags">{!isLinkedProfile(user) && <span><XCircle size={12}/> UNLINKED LOGIN</span>}<span><BadgeCheck size={12} /> {roleLabels[user.role]}</span>{isOwner && <span><Crown size={12} /> PROTECTED</span>}{user.application_status && <span>{user.application_status.toUpperCase()}</span>}</div>
+          {user.role!=='member' && <div className="asy-user-neon-status">
+            <small>{user.neon_linked ? 'NEON LOGIN: LINKED'
+              : user.neon_verified ? 'NEON LOGIN: VERIFIED — OWNER LINK NEEDED'
+              : user.has_neon_login ? 'NEON LOGIN: VERIFY EMAIL FIRST'
+              : 'NEON LOGIN: ACTIVATION NEEDED'}</small>
+            {!isOwner && user.neon_verified && !user.neon_linked && user.portal_status==='active' &&
+              <button type="button" disabled={saving} onClick={()=>void linkVerifiedStaff(user)}>
+                <ShieldCheck size={14}/> Link verified staff login
+              </button>}
+          </div>}
           <div className="asy-user-card-divider" />
           <label className="asy-user-role-label" htmlFor={`role-${user.user_id}`}>DASHBOARD ACCESS ROLE</label>
           <div className="asy-user-role-row"><select id={`role-${user.user_id}`} value={draftRoles[user.user_id] || user.role} onChange={e => setDraftRoles(current => ({ ...current, [user.user_id]: e.target.value }))} disabled={isOwner || saving || user.portal_status !== 'active'}>

@@ -123,7 +123,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                COALESCE(a.role,'member') AS role,
                ap.status AS application_status,
                (m.id IS NOT NULL) AS has_member_profile,
-               (ap.id IS NOT NULL) AS has_application
+               (ap.id IS NOT NULL) AS has_application,
+               EXISTS(SELECT 1 FROM neon_auth."user" u WHERE lower(u.email)=lower(i.email)) AS has_neon_login,
+               EXISTS(SELECT 1 FROM neon_auth."user" u WHERE lower(u.email)=lower(i.email) AND u."emailVerified"=true AND u.banned IS NOT TRUE) AS neon_verified,
+               EXISTS(SELECT 1 FROM public.portal_auth_migration_links l WHERE l.dashboard_user_id=i.user_id) AS neon_linked
         FROM identities i
         LEFT JOIN members m ON m.user_id=i.user_id
         LEFT JOIN member_applications ap ON ap.id=i.user_id
@@ -132,6 +135,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         LIMIT 500
       `;
       return res.json({ data: rows });
+    }
+    if (req.method === 'POST' && action === 'link_staff_neon') {
+      if (!owner) return res.status(403).json({error:'Owner access required.'});
+      if (!isUuid(payload.user_id) || payload.user_id===userId)
+        return res.status(400).json({error:'Choose another existing staff account.'});
+      const staff=await sql`SELECT i.email,i.portal_status,a.role
+        FROM public.identities i JOIN public.community_admins a ON a.user_id=i.user_id
+        WHERE i.user_id=${payload.user_id}::uuid LIMIT 1`;
+      if (staff.length!==1 || staff[0].portal_status!=='active' ||
+          !['management','admin','moderator'].includes(String(staff[0].role)))
+        return res.status(409).json({error:'Only active staff accounts can be linked.'});
+      const verified=await sql`SELECT id::text AS subject FROM neon_auth."user"
+        WHERE lower(email)=lower(${staff[0].email}) AND "emailVerified"=true
+          AND banned IS NOT TRUE LIMIT 2`;
+      if (verified.length!==1)
+        return res.status(409).json({error:'This staff login must verify its existing email first.'});
+      const subject=String(verified[0].subject);
+      const existing=await sql`SELECT neon_subject,dashboard_user_id::text AS uid
+        FROM public.portal_auth_migration_links
+        WHERE neon_subject=${subject} OR dashboard_user_id=${payload.user_id}::uuid LIMIT 2`;
+      if (existing.length) {
+        if (existing.length===1 && existing[0].neon_subject===subject &&
+            existing[0].uid===payload.user_id)
+          return res.json({data:{linked:true,already_linked:true}});
+        return res.status(409).json({error:'This verified login is already linked to another record.'});
+      }
+      const result=await sql`WITH inserted AS (
+        INSERT INTO public.portal_auth_migration_links(neon_subject,dashboard_user_id,verified_email)
+        SELECT u.id::text,i.user_id,lower(i.email)
+        FROM public.identities i
+        JOIN public.community_admins a ON a.user_id=i.user_id
+        JOIN neon_auth."user" u ON lower(u.email)=lower(i.email)
+        WHERE i.user_id=${payload.user_id}::uuid AND i.portal_status='active'
+          AND a.role IN ('management','admin','moderator')
+          AND u.id::text=${subject} AND u."emailVerified"=true
+          AND u.banned IS NOT TRUE
+        ON CONFLICT DO NOTHING
+        RETURNING dashboard_user_id,neon_subject
+      ), audit AS (
+        INSERT INTO public.portal_auth_link_audit(actor_user_id,target_user_id,neon_subject)
+        SELECT ${userId}::uuid,dashboard_user_id,neon_subject FROM inserted
+        RETURNING id
+      ) SELECT inserted.dashboard_user_id FROM inserted JOIN audit ON true`;
+      if (result.length!==1)
+        return res.status(409).json({error:'Neon did not save the account link. Refresh and retry.'});
+      return res.json({data:{linked:true}});
     }
     if (req.method === 'POST' && action === 'user_role') {
       if (!owner) return res.status(403).json({ error: 'Owner access required.' });

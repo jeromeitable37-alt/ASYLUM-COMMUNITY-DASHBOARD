@@ -348,11 +348,11 @@ function App() {
       await requestNeonPasswordResetCode(address);
       setRecoveryEmail(address);
       setRecoveryMode('verify');
-      setNotice({kind:'info',text:'If eligible, a one-time code has been requested through Neon Auth. Check Inbox and Spam. This is only for your Official Dashboard account.'});
+      setNotice({kind:'info',text:'If this email already has a Neon Auth login, a reset code may arrive. Check Inbox and Spam for mail from Neon Auth. Existing staff without a Neon login must activate it first; resetting a password cannot create the account.'});
     } catch (error) {
       // Never expose whether the address belongs to another user.
       setNotice({kind:'error',text:error instanceof Error && /origin/i.test(error.message)
-        ? 'This Preview address must be authorized in Neon Auth. Contact management.'
+        ? 'This Official Dashboard address must be authorized in Neon Auth. Contact management.'
         : 'Unable to request a reset code right now. Check Neon email delivery and try again later.'});
     } finally { setRecoveryBusy(false); }
   };
@@ -817,7 +817,7 @@ function App() {
                           <input id="recovery-email" type="email" autoComplete="email" required maxLength={256}
                             value={recoveryEmail} onChange={event => setRecoveryEmail(event.target.value)}
                             placeholder="name@example.com"/>
-                          <small className="asy-auth-field-help">Your membership and staff permissions will stay the same.</small>
+                          <small className="asy-auth-field-help">Use the same registered email. Management/Admin staff without Neon Auth activation should contact the Owner first.</small>
                         </div>
                         <button type="submit" className="button-primary form-submit asy-auth-action" disabled={recoveryBusy}>
                           {recoveryBusy ? 'Requesting code…' : 'Send verification code'} <ArrowRight size={17}/>
