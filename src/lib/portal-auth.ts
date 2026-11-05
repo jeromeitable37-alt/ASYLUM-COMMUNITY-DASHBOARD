@@ -2,8 +2,13 @@ import { createAuthClient } from '@neondatabase/auth';
 
 // Only the dashboard's branch-scoped Neon Auth endpoint is used.
 // A missing URL is an error: never fall back to the shared Supabase project.
-const url = import.meta.env.VITE_NEON_AUTH_URL;
-if (!url) console.error('VITE_NEON_AUTH_URL is not configured.');
+// Authenticate through this site's first-party Vercel proxy. The proxy is
+// restricted to the branch-scoped NEON_AUTH_BASE_URL on the server.
+// Cookies are then first-party, even when browsers block third-party cookies.
+const url = typeof window !== 'undefined'
+  ? new URL('/api/neon-auth', window.location.origin).toString()
+  : (import.meta.env.VITE_NEON_AUTH_URL || 'https://invalid.local');
+if (!url) console.error('Neon Auth client URL is not configured.');
 // One native Neon Better Auth client for login, sessions and JWTs.
 // Do not mix a Supabase-compatible adapter session with a native JWT client.
 export const neonEmailAuth = createAuthClient(url || 'https://invalid.local', {
@@ -26,7 +31,7 @@ export const neonEmailAuth = createAuthClient(url || 'https://invalid.local', {
  */
 function isJwt(value: unknown): value is string {
   return typeof value === 'string' &&
-    /^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$/.test(value);
+    /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
 }
 
 export async function getNeonBearer(): Promise<string> {
