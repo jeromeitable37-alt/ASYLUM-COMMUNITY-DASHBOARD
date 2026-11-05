@@ -55,6 +55,8 @@ function App() {
   const [transferEmail, setTransferEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [application, setApplication] = useState<Application | null>(null);
+  const [profileLoadState, setProfileLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [profileRefreshVersion, setProfileRefreshVersion] = useState(0);
   const [applications, setApplications] = useState<Application[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -99,11 +101,15 @@ function App() {
   useEffect(() => {
     let active = true;
     const load = async () => {
+      if (session?.user && active) {
+        setProfileLoadState('loading');
+        setApplication(null);
+      }
       try {
         const directory = await dashboard<Member[]>('directory');
         if (active) setMembers(directory ?? []);
         if (!session?.user) {
-          if (active) { setIsAdmin(false); setCurrentRole(null); setAdminAccounts([]); setApplication(null); setApplications([]); setDashboardUserId(null); }
+          if (active) { setIsAdmin(false); setCurrentRole(null); setAdminAccounts([]); setApplication(null); setApplications([]); setDashboardUserId(null); setProfileLoadState('idle'); }
           return;
         }
         const draft = readPendingRegistration();
@@ -127,6 +133,7 @@ function App() {
         const admin = role === 'owner' || role === 'management' || role === 'admin' || role === 'moderator';
         setIsAdmin(admin);
         setApplication(profile.application);
+        setProfileLoadState('ready');
         if (role === 'owner') {
           const accounts = await dashboard<AdminAccount[]>('admins');
           if (active) setAdminAccounts(accounts ?? []);
@@ -136,12 +143,15 @@ function App() {
           if (active) { setApplications(queue.applications); setMembers(queue.members); }
         } else if (active) setApplications([]);
       } catch (error) {
-        if (active) setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Could not load dashboard data.' });
+        if (active) {
+          if (session?.user) setProfileLoadState('error');
+          setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Could not load dashboard data.' });
+        }
       }
     };
     void load();
     return () => { active = false; };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, profileRefreshVersion]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -748,7 +758,16 @@ function App() {
                 <p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
               </> : <div className="signed-in-panel">
                 <span className="account-icon"><CheckCircle2 /></span><h3>You’re signed in</h3><p>{session.user.email}</p>
-                {!application && <form className="asy-complete-streamer-form" onSubmit={completeApplication}>
+                {profileLoadState === 'loading' && <div className="asy-complete-streamer-form" role="status">
+                  <div className="asy-complete-streamer-label"><ShieldCheck size={17}/> Checking your existing membership</div>
+                  <p>Connecting your verified Neon account to your official ASYLUM profile. Please do not submit another application.</p>
+                </div>}
+                {profileLoadState === 'error' && <div className="asy-complete-streamer-form" role="alert">
+                  <div className="asy-complete-streamer-label"><ShieldCheck size={17}/> Your dashboard profile could not be loaded</div>
+                  <p>If you are already a member or part of management, do not register again. Your existing account may need a verified migration link.</p>
+                  <button type="button" className="button-primary form-submit" onClick={() => setProfileRefreshVersion(v => v + 1)}>Retry loading my account <ArrowRight size={16}/></button>
+                </div>}
+                {profileLoadState === 'ready' && !application && !currentRole && <form className="asy-complete-streamer-form" onSubmit={completeApplication}>
                   <div className="asy-complete-streamer-label"><Fingerprint size={17}/> Complete your ASYLUM registration</div>
                   <p>You're signed in with Neon Auth. Fill in the required community details to submit your application for management review. Existing approved memberships remain linked after verified account migration.</p>
                   <label htmlFor="missing-full-name">FULL NAME</label>
