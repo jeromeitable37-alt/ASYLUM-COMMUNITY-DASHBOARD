@@ -7,8 +7,24 @@ const url = import.meta.env.VITE_NEON_AUTH_URL;
 if (!url) console.error('VITE_NEON_AUTH_URL is not configured.');
 export const portalAuth = createAuthClient(url || 'https://invalid.local', {
   adapter: SupabaseAuthAdapter(),
+  fetchOptions: { credentials: 'include' },
 });
-export const neonEmailAuth = createAuthClient(url || 'https://invalid.local');
+export const neonEmailAuth = createAuthClient(url || 'https://invalid.local', {
+  fetchOptions: { credentials: 'include' },
+});
+
+/**
+ * Fetch a fresh, short-lived EdDSA JWT from the verified Neon session cookie.
+ * Never use the opaque session token as a Dashboard API Bearer credential.
+ * This also refreshes tokens that may have expired (15-minute TTL).
+ */
+export async function getNeonBearer(): Promise<string> {
+  const result = await neonEmailAuth.token();
+  if (result.error || !result.data?.token) {
+    throw new Error('Your Neon session needs to be refreshed. Sign in again to access your Dashboard profile.');
+  }
+  return result.data.token;
+}
 
 export type PortalSession = {
   access_token: string;
