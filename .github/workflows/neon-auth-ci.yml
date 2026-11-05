@@ -34,6 +34,6 @@ jobs:
       - name: Test first-party Neon session cookie handling
         run: |
           npx tsc --project tsconfig.api.json --noEmit false --outDir .api-smoke --rootDir api
-          node --test tests/first-party-session.test.mjs
+          node --test tests/first-party-session.test.mjs tests/neon-db-session.test.mjs
       - name: Bundle React application
         run: npm run build
