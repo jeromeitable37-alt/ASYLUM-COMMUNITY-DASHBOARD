@@ -4,7 +4,7 @@ import {
   Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
   LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
-import { neonEmailAuth, getNeonBearer, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
+import { neonEmailAuth, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
 import type { PortalSession } from './lib/portal-auth';
 import { uploadPortalImage } from './lib/portal-images';
 import { readApiEnvelope } from './lib/read-api';
@@ -28,12 +28,12 @@ const managementRoles = [
   { role: 'Moderation', description: 'Community safety, reports, and member support.' },
 ];
 
-async function dashboard<T>(action: string, opts?: { body?: Record<string, unknown>, token?: string }): Promise<T> {
-  const publicAction = action === 'directory' || action === 'health';
-  const token = publicAction ? undefined : (opts?.token || await getNeonBearer());
+async function dashboard<T>(action: string, opts?: { body?: Record<string, unknown> }): Promise<T> {
+  // Same-origin session cookies are validated by the Vercel API against Neon Auth.
   const res = await fetch('/api/dashboard?action=' + encodeURIComponent(action), {
     method: opts?.body ? 'POST' : 'GET',
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts?.body ? { 'Content-Type': 'application/json' } : {}) },
+    credentials: 'same-origin',
+    headers: opts?.body ? { 'Content-Type': 'application/json' } : {},
     ...(opts?.body ? { body: JSON.stringify(opts.body) } : {}),
   });
   const output = await readApiEnvelope<T>(res);
@@ -259,11 +259,10 @@ function App() {
         setPassword('');
         setConfirmationEmail(null);
         setShowAuth(false);
-        const bearer = await getNeonBearer();
         const draft = readPendingRegistration();
         if (draft && draft.email.toLowerCase() === normalizedEmail) {
           try {
-            await dashboard('bootstrap', {token:bearer,body:{
+            await dashboard('bootstrap', {body:{
               display_name:draft.display_name,ign:draft.ign,uid:draft.uid,
               streamer_mode_id:draft.streamer_mode_id,
             }});
@@ -283,7 +282,7 @@ function App() {
           }
         }
         try {
-          await dashboard('profile', {token: bearer});
+          await dashboard('profile');
         } catch (profileError) {
           const message = profileError instanceof Error ? profileError.message : 'Dashboard identity is not ready.';
           if (/verify your Neon Auth email/i.test(message)) {

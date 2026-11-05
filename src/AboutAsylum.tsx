@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowRight, CalendarDays, CheckCircle2, Compass, Crown, Edit3, Flag, Save, ShieldCheck, Sparkles, X } from 'lucide-react';
-import { getNeonBearer } from './lib/portal-auth';
 import { readApiEnvelope } from './lib/read-api';
 import './portal-upgrade.css';
 
@@ -38,8 +37,7 @@ export default function AboutAsylum({ isAdmin }: {isAdmin: boolean}) {
   async function save(event:FormEvent<HTMLFormElement>){
     event.preventDefault(); setSaving(true);setNotice('');
     try {
-      const token = await getNeonBearer();
-      const r=await fetch('/api/showcase?action=about_save',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify(draft)});
+      const r=await fetch('/api/showcase?action=about_save',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(draft)});
       const response=await readApiEnvelope<About>(r,'Unable to save About ASYLUM right now.');
       setAbout(response.data);setDraft(response.data);setEditing(false);setNotice('About ASYLUM updated.');
     }catch(e){setNotice(e instanceof Error?e.message:'Could not save about information.');}

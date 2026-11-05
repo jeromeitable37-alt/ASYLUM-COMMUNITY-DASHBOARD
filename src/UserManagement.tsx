@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, RefreshCw, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
-import { getNeonBearer } from './lib/portal-auth';
 import { readApiEnvelope } from './lib/read-api';
 import './user-management.css';
 
@@ -21,10 +20,10 @@ export type PortalUser = {
 type Props = { currentUserId: string | null; onRoleUpdated?: () => void };
 
 async function accountApi<T>(action: string, payload?: Record<string, unknown>): Promise<T> {
-  const token = await getNeonBearer();
-  const response = await fetch(`/api/dashboard?action=${encodeURIComponent(action)}`, {
+  const response = await fetch('/api/dashboard?action=' + encodeURIComponent(action), {
     method: payload ? 'POST' : 'GET',
-    headers: { Authorization: `Bearer ${token}`, ...(payload ? { 'Content-Type': 'application/json' } : {}) },
+    credentials: 'same-origin',
+    headers: payload ? { 'Content-Type': 'application/json' } : {},
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });
   const result = await readApiEnvelope<T>(response, 'Unable to update the account right now.');

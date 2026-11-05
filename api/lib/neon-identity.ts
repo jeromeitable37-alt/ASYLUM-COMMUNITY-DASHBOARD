@@ -39,20 +39,58 @@ export async function requirePortalIdentity(req: VercelRequest, sql: Sql): Promi
   const issuer = process.env.NEON_AUTH_BASE_URL;
   if (!keyUrl || !issuer) throw new PortalAuthError(503, 'Neon Auth server configuration is incomplete.');
   const bearer = req.headers.authorization?.match(/^Bearer\s+([^\s]+)$/i)?.[1];
-  if (!bearer) throw new PortalAuthError(401, 'Sign in to your verified Neon account.');
   let subject: unknown;
-  try {
-    const { payload } = await jwtVerify(bearer, jwks(keyUrl), {
-      algorithms: ['EdDSA'],
-      // Neon Managed Better Auth signs JWTs with its scheme+host (origin),
-      // not the full branch-scoped /database/auth URL.
-      issuer: new URL(issuer).origin,
-      audience: new URL(issuer).origin,
-      clockTolerance: 10,
-    });
-    subject = payload.sub;
-  } catch {
-    throw new PortalAuthError(401, 'Neon session could not be verified. Please sign in again.');
+  if (bearer) {
+    // JWT callers are supported, but a failing token must never fall back to a cookie.
+    try {
+      const { payload } = await jwtVerify(bearer, jwks(keyUrl), {
+        algorithms: ['EdDSA'],
+        issuer: new URL(issuer).origin,
+        audience: new URL(issuer).origin,
+        clockTolerance: 10,
+      });
+      subject = payload.sub;
+    } catch {
+      throw new PortalAuthError(401, 'Neon bearer token could not be verified.');
+    }
+  } else {
+    // Validate first-party session cookies with Managed Neon Auth itself.
+    // Browser IDs, email, roles and unsigned/opaque cookies are not identity evidence.
+    const method = String(req.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') {
+      const host = req.headers.host;
+      if (!host || req.headers.origin !== 'https://' + host ||
+          req.headers['sec-fetch-site'] === 'cross-site') {
+        throw new PortalAuthError(403, 'Cross-site account changes are not allowed.');
+      }
+    }
+    const cookies = String(req.headers.cookie || '').split(';')
+      .map(part => part.trim())
+      .filter(part => /^(?:__Secure-|__Host-)?(?:neonauth|better-auth)[._-]/i.test(part))
+      .join('; ');
+    if (!cookies) {
+      throw new PortalAuthError(401, 'A first-party Neon login session is missing. Please sign in.');
+    }
+    let session: { session?: unknown; user?: { id?: unknown } } | null;
+    try {
+      const response = await fetch(issuer.replace(/\/$/, '') + '/get-session', {
+        method: 'GET',
+        headers: { cookie: cookies, accept: 'application/json' },
+        redirect: 'error',
+        cache: 'no-store',
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!response.ok) throw new PortalAuthError(response.status === 401 ? 401 : 502,
+        'Neon could not verify your login session.');
+      session = await response.json() as typeof session;
+    } catch (err) {
+      if (err instanceof PortalAuthError) throw err;
+      throw new PortalAuthError(502, 'Neon session verification is temporarily unavailable.');
+    }
+    if (!session?.session || !uuid(session.user?.id)) {
+      throw new PortalAuthError(401, 'Neon did not return an active session. Sign in to continue.');
+    }
+    subject = session.user.id;
   }
   if (!uuid(subject)) throw new PortalAuthError(401, 'Neon account ID is invalid.');
   // Managed Neon Auth is the source of truth for verified email ownership.

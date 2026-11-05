@@ -6,7 +6,6 @@ import {
   Search, Shield, ShieldCheck, Shirt, Sparkles, Swords, Trash2, Trophy, Upload,
   Users, X,
 } from 'lucide-react';
-import { getNeonBearer } from './lib/portal-auth';
 import { readApiEnvelope } from './lib/read-api';
 import { uploadPortalImage } from './lib/portal-images';
 import './community-showcase.css';
@@ -70,10 +69,10 @@ function Initials({ name }: { name: string }) {
   return <span className="asy-photo-fallback" aria-hidden="true">{name.trim().split(/\s+/).slice(0, 2).map(x => x[0]).join('').toUpperCase() || 'ASY'}</span>;
 }
 async function showApi<T>(action: string, body?: Record<string, unknown>): Promise<T> {
-  const token = body ? await getNeonBearer() : undefined;
   const res = await fetch('/api/showcase?action=' + encodeURIComponent(action), {
     method: body ? 'POST' : 'GET',
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json' } : {},
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const data = await readApiEnvelope<T>(res, 'Unable to load community content right now.');
