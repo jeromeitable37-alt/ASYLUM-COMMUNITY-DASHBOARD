@@ -117,19 +117,28 @@ function App() {
           if (active) { setIsAdmin(false); setCurrentRole(null); setAdminAccounts([]); setApplication(null); setApplications([]); setDashboardUserId(null); setProfileLoadState('idle'); }
           return;
         }
+        // Check the canonical Neon profile before trying to create an application.
+        // Migrated Owner/Admin members must never be forced through signup again.
+        let profile = await dashboard<{dashboard_user_id:string, application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
         const draft = readPendingRegistration();
         if (draft && draft.email.toLowerCase() === session.user.email?.toLowerCase()) {
-          try {
-            await dashboard('bootstrap', { body: {
-              display_name: draft.display_name, ign: draft.ign, uid: draft.uid,
-              streamer_mode_id: draft.streamer_mode_id,
-            } });
+          if (profile.application || profile.admin) {
             clearPendingRegistration();
-          } catch (error) {
-            if (!(error instanceof Error) || !/verify your Neon|verified email|needs an Owner-approved/i.test(error.message)) throw error;
+          } else {
+            try {
+              await dashboard('bootstrap', { body: {
+                display_name: draft.display_name, ign: draft.ign, uid: draft.uid,
+                streamer_mode_id: draft.streamer_mode_id,
+              } });
+              clearPendingRegistration();
+              profile = await dashboard<{dashboard_user_id:string, application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
+            } catch (error) {
+              // Profile lookup already succeeded; don't replace it with a
+              // false "Profile could not be loaded" when a draft is incomplete.
+              if (active) setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to submit the saved registration draft.'});
+            }
           }
         }
-        const profile = await dashboard<{dashboard_user_id:string, application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
         if (!active) return;
         setDashboardUserId(profile.dashboard_user_id);
         const role = profile.admin?.role ?? null;
@@ -139,14 +148,21 @@ function App() {
         setIsAdmin(admin);
         setApplication(profile.application);
         setProfileLoadState('ready');
-        if (role === 'owner') {
-          const accounts = await dashboard<AdminAccount[]>('admins');
-          if (active) setAdminAccounts(accounts ?? []);
-        } else if (active) setAdminAccounts([]);
-        if (admin) {
-          const queue = await dashboard<{ applications: Application[], members: Member[] }>('queue');
-          if (active) { setApplications(queue.applications); setMembers(queue.members); }
-        } else if (active) setApplications([]);
+        // Profile is already valid: a secondary management list error must
+        // not hide the signed-in Owner account behind a misleading error.
+        try {
+          if (role === 'owner') {
+            const accounts = await dashboard<AdminAccount[]>('admins');
+            if (active) setAdminAccounts(accounts ?? []);
+          } else if (active) setAdminAccounts([]);
+          if (admin) {
+            const queue = await dashboard<{ applications: Application[], members: Member[] }>('queue');
+            if (active) { setApplications(queue.applications); setMembers(queue.members); }
+          } else if (active) setApplications([]);
+        } catch (secondaryError) {
+          if (active) setNotice({kind:'error',text:'Owner profile verified, but a management panel could not be loaded: ' +
+            (secondaryError instanceof Error ? secondaryError.message : 'Please retry later.')});
+        }
       } catch (error) {
         if (active) {
           if (session?.user) setProfileLoadState('error');
