@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { requirePortalIdentity, PortalAuthError } from './lib/neon-identity.js';
 import { neon } from '@neondatabase/serverless';
 
 const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -10,8 +10,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store');
   // Public readiness check; never return credentials or any member data.
   if (req.method === 'GET' && req.query.action === 'health') {
-    const configured = Boolean(process.env.DATABASE_URL && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
-    if (!configured) return res.status(503).json({ ok: false, status: 'missing_configuration', checks: { databaseUrl: Boolean(process.env.DATABASE_URL), supabaseUrl: Boolean(process.env.SUPABASE_URL), supabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY), ownerEmail: Boolean(process.env.OWNER_EMAIL) } });
+    const configured = Boolean(process.env.DATABASE_URL && process.env.NEON_AUTH_BASE_URL && process.env.NEON_AUTH_JWKS_URL && process.env.NEON_AUTH_CUTOVER_ENABLED === 'true');
+    if (!configured) return res.status(503).json({ ok: false, status: 'missing_configuration', checks: { databaseUrl: Boolean(process.env.DATABASE_URL), neonAuthUrl: Boolean(process.env.NEON_AUTH_BASE_URL), neonJwks: Boolean(process.env.NEON_AUTH_JWKS_URL), cutoverEnabled: process.env.NEON_AUTH_CUTOVER_ENABLED === 'true' } });
     try {
       const check = await neon(process.env.DATABASE_URL!)`SELECT 1 AS connected`;
       return res.status(200).json({ ok: check.length === 1, status: 'ready' });
@@ -19,8 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(503).json({ ok: false, status: 'database_connection_failed' });
     }
   }
-  if (!process.env.DATABASE_URL || !process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) return res.status(503).json({ error: 'Database or authentication environment is not configured.' });
-  const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+  if (!process.env.DATABASE_URL) return res.status(503).json({ error: 'Neon database is not configured.' });
   const sql = neon(process.env.DATABASE_URL);
   const action = String(req.query.action || '');
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
@@ -29,10 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const rows = await sql`SELECT m.id,m.display_name,m.ign,m.uid,m.streamer_mode_id,m.team,m.role,m.photo_url FROM members m LEFT JOIN identities i ON i.user_id=m.user_id WHERE COALESCE(i.portal_status,'active')='active' ORDER BY m.created_at DESC LIMIT 3000`;
       return res.json({ data: rows });
     }
-    const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, '').trim();
-    if (!bearer) return res.status(401).json({ error: 'Sign in is required.' });
-    const { data: { user }, error } = await supa.auth.getUser(bearer);
-    if (error || !user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+    const user = await requirePortalIdentity(req,sql);
     const userId = user.id;
     const portal = await sql`SELECT portal_status FROM identities WHERE user_id=${userId}::uuid LIMIT 1`;
     if (portal.length && portal[0].portal_status !== 'active')
@@ -42,26 +38,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const manager = role === 'owner' || role === 'management' || role === 'admin' || role === 'moderator';
     const owner = role === 'owner';
     if (req.method === 'POST' && action === 'bootstrap') {
-      const displayName = safeName(user.user_metadata?.display_name);
-      const ign = safeName(user.user_metadata?.ign, 40);
-      const uid = safeName(user.user_metadata?.uid, 40);
-      const streamerId = safeName(user.user_metadata?.streamer_mode_id, 100) || null;
-      if (user.email) await sql`INSERT INTO identities (user_id,email) VALUES (${userId}::uuid,${user.email}) ON CONFLICT (user_id) DO UPDATE SET email = excluded.email`;
-      if (user.email && process.env.OWNER_EMAIL && user.email.toLowerCase() === process.env.OWNER_EMAIL.toLowerCase()) {
-        await sql`INSERT INTO community_admins (user_id,role) SELECT ${userId}::uuid,'owner' WHERE NOT EXISTS (SELECT 1 FROM community_admins WHERE role='owner') ON CONFLICT (user_id) DO NOTHING`;
-      }
-      // For new registrations, a real Streamer Mode ID must have been submitted.
-      // Existing legacy profiles without an ID remain accessible so users can complete them.
-      if (displayName.length >= 2 && ign.length >= 2 && uid.length >= 3 && streamerId) {
-        await sql`INSERT INTO member_applications (id,display_name,ign,uid,streamer_mode_id)
+      const displayName = safeName(payload.display_name || user.user_metadata.display_name);
+      const ign = safeName(payload.ign,40);
+      const uid = safeName(payload.uid,40);
+      const streamerId = safeName(payload.streamer_mode_id,100);
+      // The user is already bound to a verified Neon Auth email and dashboard UUID.
+      // Never overwrite an approved application's reviewed IGN, UID, or status.
+      const existing = await sql`SELECT id,streamer_mode_id FROM member_applications WHERE id=${userId}::uuid LIMIT 1`;
+      if (!existing.length) {
+        if (displayName.length < 2 || ign.length < 2 || uid.length < 3 || !streamerId)
+          return res.status(422).json({error:'Complete your full name, IGN, UID, and required Streamer Mode ID to submit your application.'});
+        await sql`INSERT INTO member_applications(id,display_name,ign,uid,streamer_mode_id)
           VALUES (${userId}::uuid,${displayName},${ign},${uid},${streamerId})
-          ON CONFLICT (id) DO UPDATE SET streamer_mode_id=EXCLUDED.streamer_mode_id,updated_at=now()
-          WHERE member_applications.streamer_mode_id IS NULL OR trim(member_applications.streamer_mode_id)=''`;
-        // Restore missing IDs on previously approved profiles, without changing staff-reviewed values.
+          ON CONFLICT(id) DO NOTHING`;
+      } else if (streamerId && !existing[0].streamer_mode_id) {
+        await sql`UPDATE member_applications SET streamer_mode_id=${streamerId},updated_at=now()
+          WHERE id=${userId}::uuid AND (streamer_mode_id IS NULL OR trim(streamer_mode_id)='')`;
         await sql`UPDATE members SET streamer_mode_id=${streamerId},updated_at=now()
           WHERE user_id=${userId}::uuid AND (streamer_mode_id IS NULL OR trim(streamer_mode_id)='')`;
       }
-      return res.json({ data: { created: true, needs_streamer_mode_id: !streamerId } });
+      return res.json({data:{created:true}});
     }
     if (req.method === 'POST' && action === 'set_my_streamer_id') {
       const raw = payload.streamer_mode_id;
@@ -79,9 +75,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           WHERE user_id=${userId}::uuid RETURNING id
         ) SELECT * FROM application_updated`;
       } else {
-        const displayName = safeName(user.user_metadata?.display_name);
-        const ign = safeName(user.user_metadata?.ign,40);
-        const uid = safeName(user.user_metadata?.uid,40);
+        const displayName = safeName(payload.display_name || user.user_metadata.display_name);
+        const ign = safeName(payload.ign,40);
+        const uid = safeName(payload.uid,40);
         if (displayName.length < 2 || ign.length < 2 || uid.length < 3)
           return res.status(422).json({ error: 'Your previous signup is missing IGN or UID. Please contact management to complete your member profile.' });
         rows = await sql`WITH application_inserted AS (
@@ -102,7 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sql`SELECT * FROM member_applications WHERE id = ${userId}::uuid LIMIT 1`,
         sql`SELECT user_id, role, photo_url FROM community_admins WHERE user_id = ${userId}::uuid LIMIT 1`,
       ]);
-      return res.json({ data: { application: app[0] || null, admin: admin[0] || null } });
+      return res.json({ data: { dashboard_user_id: userId, application: app[0] || null, admin: admin[0] || null } });
     }
     if (req.method === 'GET' && action === 'queue') {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
@@ -262,6 +258,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     return res.status(404).json({ error: 'Unknown API operation.' });
   } catch (err) {
+    if (err instanceof PortalAuthError) return res.status(err.status).json({error:err.message});
     console.error('Dashboard API error', err);
     const message = err instanceof Error ? err.message : '';
     // These phrases are deliberately authored in the isolated Neon procedures.

@@ -1,0 +1,34 @@
+name: Neon Auth cutover checks
+on:
+  push:
+    branches:
+      - neon-auth-cutover-ready
+      - neon-main-activation
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck client
+        run: npx tsc --noEmit
+      - name: Typecheck serverless APIs
+        run: npx tsc --project tsconfig.api.json
+      - name: Smoke test compiled API imports under Node ESM
+        run: |
+          npx tsc --project tsconfig.api.json --noEmit false --outDir .api-smoke --rootDir api
+          node --input-type=module -e "await Promise.all(['dashboard','showcase','photo-upload','neon-auth'].map(name => import('./.api-smoke/'+name+'.js')))"
+      - name: Bundle React application
+        run: npm run build

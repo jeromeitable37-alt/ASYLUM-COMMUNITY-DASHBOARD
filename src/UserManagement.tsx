@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, RefreshCw, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
-import { supabase } from './lib/supabase';
 import { readApiEnvelope } from './lib/read-api';
 import './user-management.css';
 
@@ -21,14 +20,13 @@ export type PortalUser = {
 type Props = { currentUserId: string | null; onRoleUpdated?: () => void };
 
 async function accountApi<T>(action: string, payload?: Record<string, unknown>): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Session expired. Please sign in again.');
-  const response = await fetch(`/api/dashboard?action=${encodeURIComponent(action)}`, {
+  const response = await fetch('/api/dashboard?action=' + encodeURIComponent(action), {
     method: payload ? 'POST' : 'GET',
-    headers: { Authorization: `Bearer ${session.access_token}`, ...(payload ? { 'Content-Type': 'application/json' } : {}) },
+    credentials: 'same-origin',
+    headers: payload ? { 'Content-Type': 'application/json' } : {},
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });
-  const result = await readApiEnvelope<T>(response, 'Unable to update account.');
+  const result = await readApiEnvelope<T>(response, 'Unable to update the account right now.');
   return result.data;
 }
 
@@ -85,17 +83,15 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     setBusy(user.user_id); setNotice(null);
     try {
       await accountApi('user_role', { user_id: user.user_id, role: nextRole });
-      // Read back the actual saved role instead of claiming success based
-      // solely on the POST response. Reload all account cards and role drafts.
       const latest = await accountApi<PortalUser[]>('users');
-      const persisted = latest.find(item => item.user_id === user.user_id);
       setAccounts(latest);
       setDraftRoles(Object.fromEntries(latest.map(item => [item.user_id, item.role])));
+      const persisted = latest.find(item => item.user_id === user.user_id);
       if (!persisted || persisted.role !== nextRole) {
-        throw new Error('The database did not confirm the requested role. Refresh and check again.');
+        throw new Error('Neon has not confirmed the requested role change. No success was assumed.');
       }
       onRoleUpdated?.();
-      setNotice({ type: 'success', message: `Role saved and confirmed for ${user.ign || user.display_name}.` });
+      setNotice({ type: 'success', message: `Role saved and verified for ${user.ign || user.display_name}.` });
     } catch (error) {
       setDraftRoles(current => ({ ...current, [user.user_id]: user.role }));
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not save role.' });
@@ -107,21 +103,20 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     const question = nextStatus === 'active'
       ? `Restore ${user.ign || user.display_name}'s Asylum portal access?`
       : isRemove
-      ? `Archive ${user.ign || user.display_name} from this dashboard? This hides their profile and blocks their dashboard access. Their Supabase login and access to other websites will remain unchanged. You can restore this later.`
+      ? `Archive ${user.ign || user.display_name} from this dashboard? This hides their profile and blocks their dashboard access. Their separate Neon Auth account remains intact; archive only affects this dashboard. You can restore this later.`
       : `Disable ${user.ign || user.display_name}'s Asylum portal access? This does not affect the separate Recruitment website.`;
     if (!window.confirm(question)) return;
     setBusy(user.user_id); setNotice(null);
     try {
       await accountApi('user_status', { user_id: user.user_id, portal_status: nextStatus });
-      // Confirm Neon persisted the change before showing success to the Owner.
       const latest = await accountApi<PortalUser[]>('users');
-      const persisted = latest.find(item => item.user_id === user.user_id);
       setAccounts(latest);
       setDraftRoles(Object.fromEntries(latest.map(item => [item.user_id, item.role])));
+      const persisted = latest.find(item => item.user_id === user.user_id);
       if (!persisted || persisted.portal_status !== nextStatus) {
-        throw new Error('Neon did not confirm the requested account status. Please refresh and check the record.');
+        throw new Error('Neon did not confirm the requested account status. Refresh and check the record.');
       }
-      setNotice({ type: 'success', message: `Account marked ${nextStatus} and confirmed in Neon. Existing records are preserved.` });
+      setNotice({ type: 'success', message: `Account marked ${nextStatus} and verified in Neon.` });
     } catch (error) {
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not change account status.' });
     } finally { setBusy(null); }
@@ -177,6 +172,6 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
       })}
       {filtered.length === 0 && <div className="asy-user-empty">No accounts match this filter. Use “Unlinked logins” to review sign-in records without member profiles, or “Removed” to restore archived entries.</div>}
     </div>}
-    <div className="asy-user-footnote"><LockKeyhole size={15} /><span><strong>Portal-only management:</strong> Disable/Archive blocks access to this dashboard and hides its public member profile. No Supabase authentication account is deleted. Recruitment and other websites remain unaffected. Check “Unlinked logins” before archiving records without member applications.</span></div>
+    <div className="asy-user-footnote"><LockKeyhole size={15} /><span><strong>Portal-only management:</strong> Disable/Archive blocks access to this dashboard and hides its public member profile. Neon Auth accounts are preserved. Recruitment and other websites use separate authentication and remain unaffected. Check “Unlinked logins” before archiving records without member applications.</span></div>
   </section>;
 }

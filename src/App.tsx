@@ -4,13 +4,15 @@ import {
   Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
   LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
-import type { Session } from '@supabase/supabase-js';
-import { supabase } from './lib/supabase';
+import { neonEmailAuth, readVerifiedBrowserSession, requestNeonPasswordResetCode, finishNeonPasswordReset, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
+import type { PortalSession } from './lib/portal-auth';
+import { uploadPortalImage } from './lib/portal-images';
 import { readApiEnvelope } from './lib/read-api';
 import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
 import './auth-cyber.css';
+import './neon-recovery.css';
 import './hero-motion.css';
 import CinematicMedia from './CinematicMedia';
 
@@ -26,24 +28,26 @@ const managementRoles = [
   { role: 'Moderation', description: 'Community safety, reports, and member support.' },
 ];
 
-async function dashboard<T>(action: string, opts?: { body?: Record<string, unknown>, token?: string }): Promise<T> {
-  const token = opts?.token || (await supabase.auth.getSession()).data.session?.access_token;
+async function dashboard<T>(action: string, opts?: { body?: Record<string, unknown> }): Promise<T> {
+  // Same-origin session cookies are validated by the Vercel API against Neon Auth.
   const res = await fetch('/api/dashboard?action=' + encodeURIComponent(action), {
     method: opts?.body ? 'POST' : 'GET',
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts?.body ? { 'Content-Type': 'application/json' } : {}) },
+    credentials: 'same-origin',
+    headers: opts?.body ? { 'Content-Type': 'application/json' } : {},
     ...(opts?.body ? { body: JSON.stringify(opts.body) } : {}),
   });
-  const output = await readApiEnvelope<T>(res, 'Dashboard request could not be completed.');
+  const output = await readApiEnvelope<T>(res);
   return output.data;
 }
 
 function App() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<PortalSession | null>(null);
+  const [dashboardUserId, setDashboardUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('Members');
   const [query, setQuery] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [logoBoost, setLogoBoost] = useState(false);
-  const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signup');
+  const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signin');
   const [showAuth, setShowAuth] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentRole, setCurrentRole] = useState<AdminRole | null>(null);
@@ -52,11 +56,30 @@ function App() {
   const [transferEmail, setTransferEmail] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [application, setApplication] = useState<Application | null>(null);
+  const [profileLoadState, setProfileLoadState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [profileRefreshVersion, setProfileRefreshVersion] = useState(0);
   const [applications, setApplications] = useState<Application[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState<'request' | 'verify' | null>(null);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryConfirm, setRecoveryConfirm] = useState('');
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [securityBusy, setSecurityBusy] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [securityNewPassword, setSecurityNewPassword] = useState('');
+  const [securityConfirm, setSecurityConfirm] = useState('');
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
+  const [emailOtp, setEmailOtp] = useState('');
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [missingFullName, setMissingFullName] = useState('');
+  const [missingIgn, setMissingIgn] = useState('');
+  const [missingUid, setMissingUid] = useState('');
+  const [missingStreamer, setMissingStreamer] = useState('');
   const [resendBusy, setResendBusy] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [ign, setIgn] = useState('');
@@ -70,45 +93,112 @@ function App() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
-    return () => listener.subscription.unsubscribe();
+    let mounted = true;
+    // Do not trust a cached SDK session from the previous cross-origin login.
+    // Only the server-visible first-party cookie can unlock the Dashboard.
+    void readVerifiedBrowserSession()
+      .then(verified => {
+        if (!mounted) return;
+        setSession(verified);
+        if (!verified) {
+          setAuthMode('signin');
+          setShowAuth(true);
+          setProfileLoadState('idle');
+          setNotice({kind:'info',text:'Sign in to reconnect your existing ASYLUM account. Your Owner role and member records are safe; you do not need to register again.'});
+        }
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setSession(null);
+        setAuthMode('signin');
+        setShowAuth(true);
+        setNotice({kind:'error',text:'Unable to contact the Neon session service. Your account has not been changed.'});
+      });
+    return () => {mounted = false;};
   }, []);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
+      if (session?.user && active) {
+        setProfileLoadState('loading');
+        setApplication(null);
+      }
       try {
         const directory = await dashboard<Member[]>('directory');
         if (active) setMembers(directory ?? []);
         if (!session?.user) {
-          if (active) { setIsAdmin(false); setCurrentRole(null); setAdminAccounts([]); setApplication(null); setApplications([]); }
+          if (active) { setIsAdmin(false); setCurrentRole(null); setAdminAccounts([]); setApplication(null); setApplications([]); setDashboardUserId(null); setProfileLoadState('idle'); }
           return;
         }
-        await dashboard('bootstrap', { body: { init: true } });
-        const profile = await dashboard<{ application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
+        // Check the canonical Neon profile before trying to create an application.
+        // Migrated Owner/Admin members must never be forced through signup again.
+        let profile = await dashboard<{dashboard_user_id:string, application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
+        const draft = readPendingRegistration();
+        if (draft && draft.email.toLowerCase() === session.user.email?.toLowerCase()) {
+          if (profile.application || profile.admin) {
+            clearPendingRegistration();
+          } else {
+            try {
+              await dashboard('bootstrap', { body: {
+                display_name: draft.display_name, ign: draft.ign, uid: draft.uid,
+                streamer_mode_id: draft.streamer_mode_id,
+              } });
+              clearPendingRegistration();
+              profile = await dashboard<{dashboard_user_id:string, application: Application | null, admin: { role: AdminRole, photo_url: string | null } | null }>('profile');
+            } catch (error) {
+              // Profile lookup already succeeded; don't replace it with a
+              // false "Profile could not be loaded" when a draft is incomplete.
+              if (active) setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to submit the saved registration draft.'});
+            }
+          }
+        }
         if (!active) return;
+        setDashboardUserId(profile.dashboard_user_id);
         const role = profile.admin?.role ?? null;
         setCurrentRole(role);
         setManagementPhotoUrl(profile.admin?.photo_url ?? null);
         const admin = role === 'owner' || role === 'management' || role === 'admin' || role === 'moderator';
         setIsAdmin(admin);
         setApplication(profile.application);
-        if (role === 'owner') {
-          const accounts = await dashboard<AdminAccount[]>('admins');
-          if (active) setAdminAccounts(accounts ?? []);
-        } else if (active) setAdminAccounts([]);
-        if (admin) {
-          const queue = await dashboard<{ applications: Application[], members: Member[] }>('queue');
-          if (active) { setApplications(queue.applications); setMembers(queue.members); }
-        } else if (active) setApplications([]);
+        setProfileLoadState('ready');
+        // Profile is already valid: a secondary management list error must
+        // not hide the signed-in Owner account behind a misleading error.
+        try {
+          if (role === 'owner') {
+            const accounts = await dashboard<AdminAccount[]>('admins');
+            if (active) setAdminAccounts(accounts ?? []);
+          } else if (active) setAdminAccounts([]);
+          if (admin) {
+            const queue = await dashboard<{ applications: Application[], members: Member[] }>('queue');
+            if (active) { setApplications(queue.applications); setMembers(queue.members); }
+          } else if (active) setApplications([]);
+        } catch (secondaryError) {
+          if (active) setNotice({kind:'error',text:'Owner profile verified, but a management panel could not be loaded: ' +
+            (secondaryError instanceof Error ? secondaryError.message : 'Please retry later.')});
+        }
       } catch (error) {
-        if (active) setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Could not load dashboard data.' });
+        if (active) {
+          const detail = error instanceof Error ? error.message : 'Could not load dashboard data.';
+          if (/first-party Neon login session is missing|Neon did not return an active session|Neon session has expired|Sign in to your verified Neon account|Neon login session is missing/i.test(detail)) {
+            setSession(null);
+            setDashboardUserId(null);
+            setCurrentRole(null);
+            setIsAdmin(false);
+            setProfileLoadState('idle');
+            setAuthMode('signin');
+            setShowAuth(true);
+            setNotice({ kind: 'info', text: 'Your login session needs reconnecting. Sign in with your existing account; do not register again.' });
+          } else {
+            if (session?.user) setProfileLoadState('error');
+            setNotice({ kind: 'error', text: detail });
+          }
+        }
       }
     };
     void load();
     return () => { active = false; };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, profileRefreshVersion]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -125,30 +215,19 @@ function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const uploadPhoto = async (userId: string, file: File) => {
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('Use a JPG, PNG, or WebP image.');
-    if (file.size > 5 * 1024 * 1024) throw new Error('Profile pictures must be 5 MB or smaller.');
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-    const path = userId + '/' + Date.now() + '-' + safeName;
-    const { error } = await supabase.storage.from('community-photos').upload(path, file, { upsert: true, contentType: file.type });
-    if (error) throw error;
-    const { data } = supabase.storage.from('community-photos').getPublicUrl(path);
-    await dashboard('bootstrap', { body: { init: true } });
-    await dashboard('photo', { body: { kind: 'application', photo_url: data.publicUrl } });
+  const uploadPhoto = async (_userId: string, file: File) => {
+    const publicUrl = await uploadPortalImage(file, 'application');
+    await dashboard('photo', { body: { kind: 'application', photo_url: publicUrl } });
   };
 
   const uploadOwnMemberPhoto = async (file: File) => {
     if (!session?.user) throw new Error('Sign in to update your profile picture.');
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Choose a JPG, PNG, or WebP under 5 MB.');
     setBusy(true); setNotice(null);
     try {
-      const path = session.user.id + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-      const { error } = await supabase.storage.from('community-photos').upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data } = supabase.storage.from('community-photos').getPublicUrl(path);
-      await dashboard('photo', { body: { kind: 'self', photo_url: data.publicUrl } });
-      setApplication(current => current ? { ...current, photo_url: data.publicUrl } : current);
-      setMembers(current => current.map(member => member.user_id === session.user.id ? { ...member, photo_url: data.publicUrl } : member));
+      const publicUrl = await uploadPortalImage(file, 'self');
+      await dashboard('photo', { body: { kind: 'self', photo_url: publicUrl } });
+      setApplication(current => current ? { ...current, photo_url: publicUrl } : current);
+      setMembers(current => current.map(member => member.user_id === dashboardUserId ? { ...member, photo_url: publicUrl } : member));
       setNotice({ kind: 'success', text: 'Your profile picture has been updated.' });
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save your picture.' }); }
     finally { setBusy(false); }
@@ -157,79 +236,239 @@ function App() {
   const submitAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setNotice(null);
     try {
-      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-        throw new Error('Login is not configured on this deployment. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel Environment Variables, then redeploy.');
-      }
+      if (!import.meta.env.VITE_NEON_AUTH_URL)
+        throw new Error('Official Neon Auth is not configured for this deployment. Please contact management.');
+      const normalizedEmail = email.trim().toLowerCase();
       if (authMode === 'signup') {
         const cleanName = displayName.trim(), cleanIgn = ign.trim(), cleanUid = uid.trim(), cleanStreamerId = streamerModeId.trim();
-        if (cleanName.length < 2 || cleanIgn.length < 2 || cleanUid.length < 3) throw new Error('Enter your name, IGN (at least 2 characters), and UID (at least 3 characters).');
-        if (!cleanStreamerId || cleanStreamerId.length > 100) throw new Error('Streamer Mode ID is mandatory. Enter your actual ID (maximum 100 characters).');
-        if (photoFile && (!['image/jpeg', 'image/png', 'image/webp'].includes(photoFile.type) || photoFile.size > 5 * 1024 * 1024)) throw new Error('Choose a JPG, PNG, or WebP image that is 5 MB or smaller.');
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(), password,
-          options: { data: { display_name: cleanName, ign: cleanIgn, uid: cleanUid, streamer_mode_id: cleanStreamerId } },
+        if (cleanName.length < 2 || cleanIgn.length < 2 || cleanUid.length < 3)
+          throw new Error('Enter your full name, IGN, and CODM UID.');
+        if (!cleanStreamerId || cleanStreamerId.length > 100)
+          throw new Error('Streamer Mode ID is required (maximum 100 characters).');
+        if (photoFile && (!['image/jpeg','image/png','image/webp'].includes(photoFile.type) || photoFile.size > 5*1024*1024))
+          throw new Error('Upload a JPG, PNG or WebP image no larger than 5 MB.');
+        // Persist only the non-secret application fields while verification
+        // occurs. No password or Auth tokens are stored in this draft.
+        savePendingRegistration({
+          email: normalizedEmail, display_name: cleanName,
+          ign: cleanIgn, uid: cleanUid, streamer_mode_id: cleanStreamerId,
         });
-        if (error) throw error;
-        if (data.session) await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
-        if (data.session && data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
-        if (data.session) {
-          setShowAuth(false);
-          setConfirmationEmail(null);
-        } else {
-          setConfirmationEmail(email.trim());
+        // The Supabase-compatible adapter expects a session immediately after signup.
+        // With required Neon verification, a new user has no session yet.
+        // Use the native Better Auth signup method, which returns the unverified user.
+        const { error } = await neonEmailAuth.signUp.email({
+          email: normalizedEmail, password, name: cleanName,
+        });
+        if (error) throw new Error(error.message || 'Neon signup failed.');
+        setPassword('');
+        setConfirmationEmail(normalizedEmail);
+        setShowAuth(true);
+        try {
+          const result = await neonEmailAuth.emailOtp.sendVerificationOtp({
+            email: normalizedEmail, type: 'email-verification',
+          });
+          if (result.error) throw new Error(result.error.message || 'Verification code could not be sent.');
+          setNotice({kind:'success',text:'Neon account created. Check your email for the six-digit code below. Your application will be saved after verification and sign in.'});
+        } catch (sendError) {
+          setNotice({kind:'error',text:'Account created, but Neon could not send the verification code: ' +
+            (sendError instanceof Error ? sendError.message : 'Email delivery is not ready.') +
+            '. Use Resend verification code later. Do not register again.'});
         }
-        setNotice({ kind: data.session ? 'success' : 'info', text: data.session
-          ? 'Registration submitted! Your application is waiting for management approval.'
-          : 'Registration request processed. If this is a new address and email delivery is configured, a confirmation message may arrive. Already registered? Use Sign in. No email delivery is guaranteed by this response.' });
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (error) throw error;
-        if (!data.session?.access_token) throw new Error('Authentication succeeded, but no login session was returned.');
+        // Neon Auth verifies the password. Before showing "signed in", verify
+        // the first-party HTTP-only cookie is visible to our own API server.
+        const { error } = await neonEmailAuth.signIn.email({email: normalizedEmail, password});
+        if (error) throw new Error(error.message || 'Neon sign-in failed.');
+        const verified = await readVerifiedBrowserSession();
+        if (!verified?.user?.id || verified.user.email?.toLowerCase() !== normalizedEmail) {
+          throw new Error('Neon accepted the sign-in but no first-party session was created. Your account is safe; please contact management if this persists.');
+        }
+        const currentUser = verified.user;
+        // Lookup must precede any registration draft replay. Existing Owner/
+        // Admin accounts must not be modified by a stale sign-up draft.
+        const profile = await dashboard<{
+          application: Application | null;
+          admin: { role: AdminRole } | null;
+        }>('profile');
+        const draft = readPendingRegistration();
+        if (draft && draft.email.toLowerCase() === normalizedEmail) {
+          if (profile.application || profile.admin) {
+            clearPendingRegistration();
+          } else {
+            await dashboard('bootstrap', {body: {
+              display_name: draft.display_name,
+              ign: draft.ign,
+              uid: draft.uid,
+              streamer_mode_id: draft.streamer_mode_id,
+            }});
+            clearPendingRegistration();
+            if (photoFile) {
+              await uploadPhoto(currentUser.id, photoFile);
+              setPhotoFile(null);
+            }
+          }
+        }
+        // Only show authenticated UI after the server has confirmed the
+        // canonical Dashboard profile and its authorized account mapping.
+        setSession(verified);
+        setPassword('');
         setConfirmationEmail(null);
         setShowAuth(false);
-        setPassword('');
-        try {
-          await dashboard('bootstrap', { body: { init: true }, token: data.session.access_token });
-          if (data.user && photoFile) await uploadPhoto(data.user.id, photoFile);
-          setNotice({ kind: 'success', text: 'You are signed in.' });
-        } catch (setupError) {
-          const message = setupError instanceof Error ? setupError.message : 'Check the database and Vercel settings.';
-          if (/disabled|removed from the official portal/i.test(message)) {
-            await supabase.auth.signOut();
-            setShowAuth(true);
-          }
-          setNotice({ kind: 'error', text: message.includes('disabled') || message.includes('removed') ? message : 'Login succeeded, but dashboard initialization failed: ' + message });
-        }
+        setNotice({kind:'success',text:'Your verified Neon account is connected to the Official Dashboard.'});
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-      setNotice({ kind: 'error', text: /email rate limit exceeded|over_email_send_rate_limit/i.test(message)
-        ? 'Verification emails are temporarily limited for our community. This signup attempt did not complete. Please try again later rather than repeatedly pressing Register. Already confirmed? Use Sign in.'
-        : message });
+      const detail = error instanceof Error ? error.message : 'Authentication failed. Please retry.';
+      if (authMode === 'signup' && /failed to retrieve user session/i.test(detail)) {
+        setConfirmationEmail(email.trim().toLowerCase());
+        setPassword('');
+        setNotice({kind:'info',text:'Neon may have created your account without a session. Do not register again. Use Resend code and verify the email below.'});
+      } else setNotice({kind:'error',text:detail});
     } finally { setBusy(false); }
+  };
+
+  const beginPasswordRecovery = () => {
+    setAuthMode('signin');
+    setRecoveryMode('request');
+    setRecoveryEmail(email.trim());
+    setRecoveryCode(''); setRecoveryPassword(''); setRecoveryConfirm('');
+    setPassword('');
+    setNotice(null);
+  };
+
+  const requestPasswordResetCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (recoveryBusy) return;
+    const address = recoveryEmail.trim().toLowerCase();
+    if (!address.includes('@')) {
+      setNotice({kind:'error',text:'Enter your Neon Auth account email.'});
+      return;
+    }
+    setRecoveryBusy(true); setNotice(null);
+    try {
+      await requestNeonPasswordResetCode(address);
+      setRecoveryEmail(address);
+      setRecoveryMode('verify');
+      setNotice({kind:'info',text:'If eligible, a one-time code has been requested through Neon Auth. Check Inbox and Spam. This is only for your Official Dashboard account.'});
+    } catch (error) {
+      // Never expose whether the address belongs to another user.
+      setNotice({kind:'error',text:error instanceof Error && /origin/i.test(error.message)
+        ? 'This Preview address must be authorized in Neon Auth. Contact management.'
+        : 'Unable to request a reset code right now. Check Neon email delivery and try again later.'});
+    } finally { setRecoveryBusy(false); }
+  };
+
+  const finishPasswordRecovery = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (recoveryBusy) return;
+    if (!/^\d{6,8}$/.test(recoveryCode.trim())) {
+      setNotice({kind:'error',text:'Enter the numeric reset code sent to your email.'});
+      return;
+    }
+    if (recoveryPassword.length < 8 || recoveryPassword !== recoveryConfirm) {
+      setNotice({kind:'error',text:'Use a password of at least 8 characters and confirm it correctly.'});
+      return;
+    }
+    setRecoveryBusy(true); setNotice(null);
+    try {
+      await finishNeonPasswordReset(recoveryEmail.trim().toLowerCase(), recoveryCode.trim(), recoveryPassword);
+      setRecoveryMode(null);
+      setEmail(recoveryEmail.trim().toLowerCase());
+      setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm('');
+      setNotice({kind:'success',text:'Your Neon Auth password has been changed. Sign in with the new password.'});
+    } catch (error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'The reset code could not be verified. Request a new code.'});
+    } finally {setRecoveryBusy(false);}
+  };
+
+  const updateMyPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (securityBusy) return;
+    if (securityNewPassword.length < 8 || securityNewPassword !== securityConfirm) {
+      setNotice({kind:'error',text:'Your new password must be at least 8 characters and match the confirmation.'});
+      return;
+    }
+    setSecurityBusy(true);setNotice(null);
+    try {
+      const result = await neonEmailAuth.changePassword({
+        currentPassword,newPassword:securityNewPassword,revokeOtherSessions:true,
+      });
+      if (result.error) throw new Error(result.error.message || 'Password change was not successful.');
+      setCurrentPassword('');setSecurityNewPassword('');setSecurityConfirm('');
+      setSecurityOpen(false);
+      setNotice({kind:'success',text:'Your Neon Auth password was updated. Other sessions were signed out.'});
+    } catch (error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to change your password.'});
+    } finally {setSecurityBusy(false);}
+  };
+
+  const resumeEmailVerification = async () => {
+    if (resendBusy) return;
+    const address = email.trim().toLowerCase();
+    if (!address || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) {
+      setNotice({kind:'error',text:'Enter the email address you used to register.'});
+      return;
+    }
+    setConfirmationEmail(address);
+    setPassword('');
+    setNotice(null);
+    setResendBusy(true);
+    try {
+      const {error} = await neonEmailAuth.emailOtp.sendVerificationOtp({
+        email:address, type:'email-verification',
+      });
+      if (error) throw new Error(error.message || 'Could not request verification code.');
+      setNotice({kind:'info',text:'If your Neon account still needs verification, a code has been requested. Check your Inbox or Spam. Do not create another account.'});
+    } catch (error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to request a verification code.'});
+    } finally {setResendBusy(false);}
   };
 
   const resendConfirmation = async () => {
     if (!confirmationEmail || resendBusy) return;
-    setResendBusy(true);
-    setNotice(null);
+    setResendBusy(true); setNotice(null);
     try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: confirmationEmail.trim(),
+      const {error} = await neonEmailAuth.emailOtp.sendVerificationOtp({
+        email:confirmationEmail,type:'email-verification',
       });
       if (error) throw error;
-      // Supabase may return HTTP 200 for a previously confirmed account;
-      // a successful resend request is not proof that any email was sent.
-      setNotice({ kind: 'info', text: 'Request processed. Only eligible unverified accounts may receive another confirmation email. If you are already registered, use Sign in. If no message arrives, contact management rather than repeatedly resending.' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to resend confirmation email. Try again later.';
-      setNotice({ kind: 'error', text: /email rate limit exceeded|over_email_send_rate_limit/i.test(message)
-        ? 'The community verification email limit has been reached. No new email was sent. Check for an earlier email and try again later.'
-        : message });
-    } finally {
-      setResendBusy(false);
+      setNotice({kind:'success',text:'Verification code requested from Neon Auth. Check your email, then enter the code below.'});
+    } catch(error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Could not resend code. Try again later.'});
+    } finally { setResendBusy(false); }
+  };
+
+  const confirmVerification = async (event:FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmationEmail || !/^\d{6,8}$/.test(emailOtp.trim())) {
+      setNotice({kind:'error',text:'Enter the verification code from your email.'});
+      return;
     }
+    setVerifyBusy(true);setNotice(null);
+    try {
+      const {error} = await neonEmailAuth.emailOtp.verifyEmail({
+        email:confirmationEmail,otp:emailOtp.trim(),
+      });
+      if (error) throw error;
+      setEmailOtp(''); setConfirmationEmail(null); setAuthMode('signin');
+      setNotice({kind:'success',text:'Email verified with Neon Auth. Sign in to finish your membership application. You do not need to register again.'});
+    } catch(error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to verify code.'});
+    } finally {setVerifyBusy(false);}
+  };
+
+  const completeApplication = async (event:FormEvent<HTMLFormElement>) => {
+    event.preventDefault();setBusy(true);setNotice(null);
+    try {
+      await dashboard('bootstrap',{body:{
+        display_name:missingFullName.trim(),ign:missingIgn.trim(),
+        uid:missingUid.trim(),streamer_mode_id:missingStreamer.trim(),
+      }});
+      const profile=await dashboard<{application:Application|null}>('profile');
+      setApplication(profile.application);
+      setNotice({kind:'success',text:'Your official ASYLUM application is now submitted for management review.'});
+    } catch(error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Could not complete your profile.'});
+    } finally{setBusy(false);}
   };
 
   const saveOwnStreamerId = async (event: FormEvent<HTMLFormElement>) => {
@@ -244,7 +483,7 @@ function App() {
     try {
       const updated = await dashboard<Application>('set_my_streamer_id', { body: { streamer_mode_id: value } });
       setApplication(updated);
-      setMembers(current => current.map(member => member.user_id === session?.user.id
+      setMembers(current => current.map(member => member.user_id === dashboardUserId
         ? { ...member, streamer_mode_id: value } : member));
       setMyStreamerDraft('');
       setNotice({ kind: 'success', text: updated.status === 'pending'
@@ -277,12 +516,9 @@ function App() {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Use a JPG, PNG, or WebP under 5 MB.');
     setBusy(true); setNotice(null);
     try {
-      const path = 'members/' + member.id + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-      const { error } = await supabase.storage.from('community-photos').upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data } = supabase.storage.from('community-photos').getPublicUrl(path);
-      await dashboard('photo', { body: { kind: 'member', member_id: member.id, photo_url: data.publicUrl } });
-      setMembers(current => current.map(item => item.id === member.id ? { ...item, photo_url: data.publicUrl } : item));
+      const publicUrl = await uploadPortalImage(file, 'member');
+      await dashboard('photo', { body: { kind: 'member', member_id: member.id, photo_url: publicUrl } });
+      setMembers(current => current.map(item => item.id === member.id ? { ...item, photo_url: publicUrl } : item));
       setNotice({ kind: 'success', text: 'Profile picture updated.' });
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to upload picture.' }); }
     finally { setBusy(false); }
@@ -293,12 +529,9 @@ function App() {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) throw new Error('Use a JPG, PNG, or WebP under 5 MB.');
     setBusy(true); setNotice(null);
     try {
-      const path = 'management/' + session.user.id + '/' + Date.now() + '-' + file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-      const { error } = await supabase.storage.from('community-photos').upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data } = supabase.storage.from('community-photos').getPublicUrl(path);
-      await dashboard('photo', { body: { kind: 'admin', photo_url: data.publicUrl } });
-      setManagementPhotoUrl(data.publicUrl);
+      const publicUrl = await uploadPortalImage(file, 'management');
+      await dashboard('photo', { body: { kind: 'admin', photo_url: publicUrl } });
+      setManagementPhotoUrl(publicUrl);
       setNotice({ kind: 'success', text: 'Management profile picture saved.' });
     } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save photo.' }); }
     finally { setBusy(false); }
@@ -326,6 +559,25 @@ function App() {
     finally { setBusy(false); }
   };
 
+  const migrateLegacyPhotos = async () => {
+    if (currentRole !== 'owner' || busy) return;
+    setBusy(true); setNotice(null);
+    try {
+      const response = await fetch('/api/migrate-images', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ execute: true }),
+      });
+      const result = await readApiEnvelope<{ migrated:number; failed:number }>(response);
+      setNotice({ kind: result.data.failed ? 'info' : 'success',
+        text: 'Moved ' + result.data.migrated + ' public images to Neon Storage. ' +
+          result.data.failed + ' still need review. Original public files were not deleted.' });
+      setProfileRefreshVersion(v => v+1);
+    } catch (error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to transfer public images.'});
+    } finally { setBusy(false); }
+  };
+
   const transferOwnership = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (currentRole !== 'owner' || !window.confirm('Transfer ownership to ' + transferEmail.trim() + '? You will become a Management Admin and cannot take ownership back yourself.')) return;
@@ -338,7 +590,7 @@ function App() {
     finally { setBusy(false); }
   };
 
-  const signOut = async () => { await supabase.auth.signOut(); setNotice({ kind: 'info', text: 'You have signed out.' }); setShowAuth(false); };
+  const signOut = async () => { await neonEmailAuth.signOut(); setSession(null); setDashboardUserId(null); setNotice({ kind: 'info', text: 'You have signed out of Neon Auth.' }); setShowAuth(false); };
 
   return (
     <div className="site-shell">
@@ -490,7 +742,7 @@ function App() {
           members={members}
           isAdmin={isAdmin}
           currentRole={currentRole}
-          currentUserId={session?.user.id ?? null}
+          currentUserId={dashboardUserId}
           onMemberUpdated={updated => setMembers(current => current.map(item => item.id === updated.id ? { ...item, ...updated } : item))}
         />
 
@@ -501,18 +753,26 @@ function App() {
               <div className="auth-mood-particles" aria-hidden="true"><span /><span /><span /><span /><span /></div>
               {!session || showAuth ? <>
                 <div className="auth-overline"><Sparkles size={13} /> SECURE ASYLUM ACCESS / 2026</div>
-                <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
-                <div className="auth-switch"><button type="button" className={authMode === 'signup' ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setConfirmationEmail(null); setNotice(null); }}>Register</button><button type="button" className={authMode === 'signin' ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Sign in</button></div>
-                {authMode === 'signup' && confirmationEmail && <div className="asy-confirm-email" role="status">
-                  <div className="asy-confirm-title"><CheckCircle2 size={18} /> Email confirmation or existing account?</div>
-                  <p>Request processed for <strong>{confirmationEmail}</strong>. A new account may need confirmation before it can sign in. Existing confirmed accounts normally do not receive another signup email.</p>
-                  <p>Already registered? Choose <strong>Sign in</strong>. Otherwise, check Inbox, Spam, or Promotions. Email delivery depends on the community's SMTP settings. Please don't repeatedly register or resend.</p>
+                <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{recoveryMode ? 'Recover your Neon account.' : authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{recoveryMode ? 'Reset your password using a code delivered to your registered email.' : authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
+                <div className="auth-switch"><button type="button" className={authMode === 'signup' && !recoveryMode ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setRecoveryMode(null); setNotice(null); }}>Register</button><button type="button" className={authMode === 'signin' && !recoveryMode ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setRecoveryMode(null); setNotice(null); }}>Sign in</button></div>
+                {!recoveryMode && confirmationEmail && <div className="asy-confirm-email" role="status">
+                  <div className="asy-confirm-title"><CheckCircle2 size={18} /> Neon Auth — verify your email</div>
+                  <p>Check the email sent to <strong>{confirmationEmail}</strong> for your one-time verification code. Your membership is <strong>not</strong> submitted until your email is verified and your profile is completed.</p>
+                  <form onSubmit={confirmVerification} className="asy-neon-otp-form">
+                    <label htmlFor="neon-email-code">EMAIL VERIFICATION CODE</label>
+                    <input id="neon-email-code" type="text" inputMode="numeric" pattern="[0-9]{6,8}"
+                      required minLength={6} maxLength={8} autoComplete="one-time-code" placeholder="6-digit code"
+                      value={emailOtp} onChange={e=>setEmailOtp(e.target.value.replace(/[^0-9]/g,''))}/>
+                    <button className="button-primary form-submit" type="submit" disabled={verifyBusy}>
+                      {verifyBusy ? 'Verifying…' : 'Verify Neon email'} <ArrowRight size={16} />
+                    </button>
+                  </form>
                   <div className="asy-confirm-actions">
-                    <button type="button" disabled={resendBusy} onClick={() => void resendConfirmation()}>{resendBusy ? 'Requesting…' : 'Resend if unverified'}</button>
-                    <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Existing account? Sign in</button>
+                    <button type="button" disabled={resendBusy} onClick={() => void resendConfirmation()}>{resendBusy ? 'Sending…' : 'Resend code'}</button>
+                    <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Already verified? Sign in</button>
                   </div>
                 </div>}
-                <form className="member-form" onSubmit={submitAuth}>
+                {!recoveryMode && !confirmationEmail && <form className="member-form" onSubmit={submitAuth}>
                   {authMode === 'signup' && <>
                     <label htmlFor="display-name">FULL NAME</label><input id="display-name" required minLength={2} maxLength={60} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
                     <label htmlFor="ign">IN-GAME NAME (IGN)</label><input id="ign" required minLength={2} maxLength={40} value={ign} onChange={e => setIgn(e.target.value)} placeholder="Your exact IGN" />
@@ -526,11 +786,63 @@ function App() {
                     <button className="auth-password-toggle" type="button" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <EyeOff size={19} /> : <Eye size={19} />}</button>
                   </div>
                   {notice?.kind === 'error' && <div className="auth-error-inline" role="alert"><X size={14} /> {notice.text}</div>}
-                  <button className="button-primary form-submit auth-neon-submit" type="submit" disabled={busy || (authMode === 'signup' && Boolean(confirmationEmail))}>{busy ? 'Securing your session…' : authMode === 'signup' ? 'Create ASYLUM profile' : 'Access community'} <ArrowUpRight size={17} /></button>
-                </form><p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
+                  <button className="button-primary form-submit auth-neon-submit" type="submit" disabled={busy}>{busy ? 'Securing your session…' : authMode === 'signup' ? 'Create ASYLUM profile' : 'Access community'} <ArrowUpRight size={17} /></button>
+                </form>}
+                {authMode === 'signup' && !recoveryMode && !confirmationEmail && <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}><ShieldCheck size={15} /> Already registered but need to verify? Send code</button>}
+                {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Activate existing Neon account / Set password</button>}
+                {recoveryMode && <div className="asy-recovery-panel">
+                  {recoveryMode === 'request'
+                    ? <form className="asy-recovery-form" onSubmit={requestPasswordResetCode}>
+                        <h4><LockKeyhole size={19}/> Activate or recover your Neon account</h4>
+                        <p>Use the email registered with ASYLUM. A verification code sent by Neon lets you set a new Neon-only password. Your existing IGN, membership and staff role stay in Neon; no Recruitment account is changed.</p>
+                        <label htmlFor="recovery-email">REGISTERED EMAIL</label>
+                        <input id="recovery-email" type="email" autoComplete="email" required maxLength={256} value={recoveryEmail} onChange={event => setRecoveryEmail(event.target.value)} placeholder="you@example.com"/>
+                        <button type="submit" className="button-primary form-submit" disabled={recoveryBusy}>{recoveryBusy ? 'Requesting code…' : 'Send password reset code'} <ArrowRight size={17}/></button>
+                      </form>
+                    : <form className="asy-recovery-form" onSubmit={finishPasswordRecovery}>
+                        <h4><ShieldCheck size={19}/> Verify and set a new password</h4>
+                        <p>Enter the code sent to <strong>{recoveryEmail}</strong>. Your Admin/Member role and IGN will not change.</p>
+                        <label htmlFor="recovery-code">EMAIL RESET CODE</label>
+                        <input id="recovery-code" type="text" inputMode="numeric" pattern="[0-9]{6,8}" minLength={6} maxLength={8} required autoComplete="one-time-code" value={recoveryCode} onChange={event=>setRecoveryCode(event.target.value.replace(/[^0-9]/g,''))} placeholder="6-digit code"/>
+                        <label htmlFor="recovery-new">NEW PASSWORD</label>
+                        <input id="recovery-new" type="password" required minLength={8} autoComplete="new-password" value={recoveryPassword} onChange={event=>setRecoveryPassword(event.target.value)} placeholder="At least 8 characters"/>
+                        <label htmlFor="recovery-confirm">CONFIRM NEW PASSWORD</label>
+                        <input id="recovery-confirm" type="password" required minLength={8} autoComplete="new-password" value={recoveryConfirm} onChange={event=>setRecoveryConfirm(event.target.value)} placeholder="Enter password again"/>
+                        <button type="submit" className="button-primary form-submit" disabled={recoveryBusy}>{recoveryBusy ? 'Updating password…' : 'Reset my password'} <ShieldCheck size={17}/></button>
+                        <button type="button" className="asy-recovery-link" onClick={()=> { setRecoveryMode('request'); setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm(''); setNotice(null); }}>Request a new code or change email</button>
+                      </form>}
+                  {notice && <p className={notice.kind === 'error' ? 'asy-recovery-error' : 'asy-recovery-info'} role="status">{notice.text}</p>}
+                  <button type="button" className="asy-recovery-back" onClick={() => { setRecoveryMode(null);setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm('');setAuthMode('signin');setNotice(null); }}>Back to Sign in</button>
+                </div>}
+                <p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
               </> : <div className="signed-in-panel">
                 <span className="account-icon"><CheckCircle2 /></span><h3>You’re signed in</h3><p>{session.user.email}</p>
-                {!application?.streamer_mode_id && <form className="asy-complete-streamer-form" onSubmit={saveOwnStreamerId}>
+                {profileLoadState === 'loading' && <div className="asy-complete-streamer-form" role="status">
+                  <div className="asy-complete-streamer-label"><ShieldCheck size={17}/> Checking your existing membership</div>
+                  <p>Connecting your verified Neon account to your official ASYLUM profile. Please do not submit another application.</p>
+                </div>}
+                {profileLoadState === 'error' && <div className="asy-complete-streamer-form" role="alert">
+                  <div className="asy-complete-streamer-label"><ShieldCheck size={17}/> Your dashboard profile could not be loaded</div>
+                  <p>If you're already approved or part of management, do not register again. The original account stays in Neon even if this request fails.</p>
+                  {notice?.kind === 'error' && <p className="asy-recovery-error">Details: {notice.text}</p>}
+                  <button type="button" className="button-primary form-submit" onClick={() => {setNotice(null);setProfileRefreshVersion(v => v + 1);}}>Retry loading my account <ArrowRight size={16}/></button>
+                </div>}
+                {profileLoadState === 'ready' && !application && !currentRole && <form className="asy-complete-streamer-form" onSubmit={completeApplication}>
+                  <div className="asy-complete-streamer-label"><Fingerprint size={17}/> Complete your ASYLUM registration</div>
+                  <p>You're signed in with Neon Auth. Fill in the required community details to submit your application for management review. Existing approved memberships remain linked after verified account migration.</p>
+                  <label htmlFor="missing-full-name">FULL NAME</label>
+                  <input id="missing-full-name" required minLength={2} maxLength={60} value={missingFullName} onChange={e=>setMissingFullName(e.target.value)} placeholder="Your full name"/>
+                  <label htmlFor="missing-ign">IN-GAME NAME (IGN)</label>
+                  <input id="missing-ign" required minLength={2} maxLength={40} value={missingIgn} onChange={e=>setMissingIgn(e.target.value)} placeholder="Your CODM IGN"/>
+                  <label htmlFor="missing-uid">PLAYER UID</label>
+                  <input id="missing-uid" required minLength={3} maxLength={40} value={missingUid} onChange={e=>setMissingUid(e.target.value)} placeholder="Your game UID"/>
+                  <label htmlFor="missing-streamer">STREAMER MODE ID — REQUIRED</label>
+                  <input id="missing-streamer" required maxLength={100} value={missingStreamer} onChange={e=>setMissingStreamer(e.target.value)} placeholder="Your actual Streamer Mode ID"/>
+                  <button type="submit" className="button-primary form-submit" disabled={busy}>
+                    <Save size={16}/>{busy ? 'Saving…' : 'Submit Official Application'}
+                  </button>
+                </form>}
+                {application && !application.streamer_mode_id && <form className="asy-complete-streamer-form" onSubmit={saveOwnStreamerId}>
                   <div className="asy-complete-streamer-label"><Fingerprint size={17} /> Complete your required Streamer Mode ID</div>
                   <p>{application
                     ? 'Your existing membership profile is missing this field. Add it below without creating another account.'
@@ -543,7 +855,23 @@ function App() {
                     <Save size={16} /> {busy ? 'Saving…' : 'Save Streamer Mode ID'}
                   </button>
                 </form>}
-                {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : <><p>No member application is linked to this account yet. If you signed up before registration was enabled, contact management.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></>}
+                {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : profileLoadState === 'ready' && !currentRole ? <><p>No application was found for this new Dashboard account. Existing approved members should contact management instead of registering again.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></> : null}
+
+                {session && <div className="asy-password-security">
+                  <button className="asy-recovery-link" type="button" onClick={() => {setSecurityOpen(v=>!v);setNotice(null);}} aria-expanded={securityOpen}><LockKeyhole size={16}/> {securityOpen ? 'Close password settings' : 'Change my password'}</button>
+                  {securityOpen && <form className="asy-recovery-form" onSubmit={updateMyPassword}>
+                    <h4>Update Neon Auth password</h4>
+                    <p>For security, enter your current password. Other signed-in sessions will be revoked.</p>
+                    <label htmlFor="security-old">CURRENT PASSWORD</label>
+                    <input id="security-old" type="password" required autoComplete="current-password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)}/>
+                    <label htmlFor="security-new">NEW PASSWORD</label>
+                    <input id="security-new" type="password" minLength={8} required autoComplete="new-password" value={securityNewPassword} onChange={e=>setSecurityNewPassword(e.target.value)}/>
+                    <label htmlFor="security-confirm">CONFIRM NEW PASSWORD</label>
+                    <input id="security-confirm" type="password" minLength={8} required autoComplete="new-password" value={securityConfirm} onChange={e=>setSecurityConfirm(e.target.value)}/>
+                    <button className="button-primary form-submit" type="submit" disabled={securityBusy}>{securityBusy ? 'Updating…' : 'Change password'} <ShieldCheck size={16}/></button>
+                  </form>}
+                </div>}
+                {session && <p className="asy-neon-privacy-note">Neon Auth manages account security for this Dashboard. Recruitment and Jersey accounts are separate.</p>}
                 <button className="button-primary form-submit" onClick={() => void signOut()}>Sign out <ArrowUpRight size={17} /></button>{isAdmin && <button className="button-quiet" onClick={() => scrollTo('admin-panel')}>Open management panel</button>}
               </div>}
             </div>
@@ -563,7 +891,14 @@ function App() {
           </div>
           <div className="admin-records"><h3>Recent applications</h3>{applications.slice(0, 8).map(item => <div className="admin-record" key={item.id}><span>{item.ign} <small>· {item.uid}</small></span><span className={'status-text ' + item.status}>{item.status}</span></div>)}</div>
           {currentRole === 'owner' && <div className="owner-tools">
-            <UserManagement currentUserId={session?.user.id || null} onRoleUpdated={() => { void dashboard<AdminAccount[]>('admins').then(setAdminAccounts).catch(() => {}); }} />
+            <UserManagement currentUserId={dashboardUserId} onRoleUpdated={() => { void dashboard<AdminAccount[]>('admins').then(setAdminAccounts).catch(() => {}); }} />
+            <div className="owner-form">
+              <h3>Transfer existing profile photos to Neon Storage</h3>
+              <p>Copies only public ASYLUM images to Neon Main, updates official Neon records and leaves the old shared storage untouched.</p>
+              <button type="button" className="button-primary" disabled={busy} onClick={() => void migrateLegacyPhotos()}>
+                {busy ? 'Transferring…' : 'Move public ASYLUM photos to Neon'}
+              </button>
+            </div>
             <form className="owner-form transfer-form" onSubmit={transferOwnership}><label htmlFor="transfer-email">TRANSFER COMMUNITY OWNERSHIP</label><p>The new Owner must already have a registered account. Your account will automatically become a Management Admin after transfer.</p><input id="transfer-email" type="email" required value={transferEmail} onChange={e => setTransferEmail(e.target.value)} placeholder="newowner@example.com" /><button className="transfer-button" type="submit" disabled={busy}>Transfer ownership <Crown size={16} /></button></form>
           </div>}
         </section>}

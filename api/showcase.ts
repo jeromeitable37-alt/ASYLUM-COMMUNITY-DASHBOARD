@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { randomUUID } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
-import { createClient } from '@supabase/supabase-js';
+import { requirePortalIdentity, PortalAuthError } from './lib/neon-identity.js';
 
 const isUuid = (v: unknown): v is string =>
   typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -69,15 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not supported.' });
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY)
-      return res.status(503).json({ error: 'Authentication is not configured.' });
-    const bearer = req.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
-    if (!bearer) return res.status(401).json({ error: 'Sign in to manage community content.' });
-    const supabase = createClient(process.env.SUPABASE_URL,process.env.SUPABASE_ANON_KEY,{
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: { user }, error: authError } = await supabase.auth.getUser(bearer);
-    if (authError || !user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.' });
+    const user = await requirePortalIdentity(req, sql);
     const staff = await sql`SELECT a.role,COALESCE(i.portal_status,'active') AS portal_status FROM community_admins a LEFT JOIN identities i ON i.user_id=a.user_id WHERE a.user_id=${user.id}::uuid LIMIT 1`;
     if (staff[0]?.portal_status && staff[0].portal_status !== 'active') return res.status(403).json({error:'Your dashboard account is disabled or removed.'});
     const role = String(staff[0]?.role || '');
@@ -146,11 +138,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const description = str(body.description,400);
       const logo = optionalUrl(body.logo_url);
       const captain = readId(body.captain_member_id);
-      // Validate untrusted values before treating the roster as UUID strings.
-      const rawMemberIds: unknown[] = Array.isArray(body.member_ids) ? body.member_ids : [];
-      if (rawMemberIds.length > 100 || rawMemberIds.some(x => !isUuid(x)))
+      if (body.member_ids !== undefined && !Array.isArray(body.member_ids))
+        return res.status(400).json({ error: 'Team members must be a list.' });
+      const rawIds: unknown[] = Array.isArray(body.member_ids) ? body.member_ids : [];
+      if (rawIds.length > 100 || rawIds.some(id => !isUuid(id)))
         return res.status(400).json({ error: 'Invalid team member list.' });
-      const memberIds: string[] = [...new Set(rawMemberIds.filter(isUuid))];
+      const memberIds: string[] = [...new Set(rawIds as string[])];
       if (captain && !memberIds.includes(captain)) memberIds.push(captain);
       const teamId = id || randomUUID();
       // Team metadata and its roster are committed together or rolled back together.
@@ -231,6 +224,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     return res.status(404).json({ error: 'Unknown community action.' });
   } catch (error) {
+    if (error instanceof PortalAuthError) return res.status(error.status).json({error:error.message});
     console.error('Asylum showcase request failed',error);
     const message = errText(error);
     if (/invalid|too long|must|contain|https:|duplicate key|unique constraint|foreign key/i.test(message))
