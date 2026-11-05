@@ -64,9 +64,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (typeof value === 'string') headers.set(key, value);
   }
 
-  let body: string | Buffer | undefined;
+  let body: string | undefined;
   if (method === 'POST' && req.body !== undefined) {
-    body = Buffer.isBuffer(req.body) ? req.body
+    body = Buffer.isBuffer(req.body) ? req.body.toString('utf8')
       : typeof req.body === 'string' ? req.body
       : JSON.stringify(req.body);
   }
