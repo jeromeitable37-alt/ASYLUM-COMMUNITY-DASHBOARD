@@ -64,13 +64,23 @@ export async function requirePortalIdentity(req: VercelRequest, sql: Sql): Promi
         throw new PortalAuthError(403, 'Cross-site account changes are not allowed.');
       }
     }
-    const cookies = String(req.headers.cookie || '').split(';')
-      .map(part => part.trim())
-      .filter(part => /^(?:__Secure-|__Host-)?(?:neonauth|better-auth)[._-]/i.test(part))
-      .join('; ');
-    if (!cookies) {
-      throw new PortalAuthError(401, 'A first-party Neon login session is missing. Please sign in.');
+    // Match Neon Managed Auth's documented __Secure-neonauth.session_token
+    // as well as version-specific neon-auth/better-auth prefixes.
+    // Do not forward unrelated first-party site cookies to Neon.
+    const allCookies = String(req.headers.cookie || '').split(';').map(part => part.trim()).filter(Boolean);
+    const sessionCookies = allCookies.filter(part => {
+      const name = part.split('=')[0]?.trim() || '';
+      return /^(?:__Secure-|__Host-)?(?:neonauth|neon[-_]auth|better[-_]auth)[._-]/i.test(name);
+    });
+    if (sessionCookies.length === 0) {
+      // Metadata only: no cookie values, passwords, email, or user IDs.
+      console.info('Official Neon auth session diagnostic:', {
+        receivedCookieHeader: allCookies.length > 0,
+        recognizedCookieCount: 0,
+      });
+      throw new PortalAuthError(401, 'Neon session cookie was not attached to the Dashboard request. Sign in again after refreshing the site.');
     }
+    const cookies = sessionCookies.join('; ');
     let session: { session?: unknown; user?: { id?: unknown } } | null;
     try {
       const response = await fetch(issuer.replace(/\/$/, '') + '/get-session', {

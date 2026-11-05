@@ -104,11 +104,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
     if (cookies.length) {
-      // Never allow upstream Domain/Path to bind these cookies to neon.tech;
-      // these are first-party cookies on this Vercel host.
-      const safeCookies = cookies.map(cookie => cookie
-        .replace(/;\s*Domain=[^;]*/gi, '')
-        .replace(/;\s*Path=\/[^;]*/gi, '; Path=/'));
+      // Neon sets session cookies for its own Auth endpoint. Rebase the
+      // browser session to this Vercel site's ROOT path, including when
+      // Neon omits Path entirely. Otherwise get-session can work while
+      // /api/dashboard receives no session cookie.
+      //
+      // Do not alter the signed cookie name/value, expiry, or HttpOnly/Secure.
+      // For this first-party app, SameSite=Lax is sufficient and limits CSRF.
+      const safeCookies = cookies.map(cookie => {
+        const parts = cookie.split(';').map(part => part.trim()).filter(Boolean);
+        const nameAndValue = parts.shift() || '';
+        const attributes = parts.filter(part =>
+          !/^(?:domain|path|samesite|partitioned)(?:=|$)/i.test(part));
+        const secure = attributes.some(part => /^secure$/i.test(part));
+        const httpOnly = attributes.some(part => /^httponly$/i.test(part));
+        if (!secure) attributes.push('Secure');
+        if (!httpOnly) attributes.push('HttpOnly');
+        return [nameAndValue, ...attributes, 'Path=/', 'SameSite=Lax'].join('; ');
+      });
       res.setHeader('Set-Cookie', safeCookies);
     }
 
