@@ -138,7 +138,7 @@ INSERT INTO community_about (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 -- Owner-only Neon account controls: atomic role/status updates with audit.
 
-CREATE FUNCTION public.portal_change_role(p_actor uuid,p_target uuid,p_new_role text)
+CREATE OR REPLACE FUNCTION public.portal_change_role(p_actor uuid,p_target uuid,p_new_role text)
 RETURNS TABLE(user_id uuid,role text)
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -172,7 +172,7 @@ BEGIN
   ELSE
     INSERT INTO public.community_admins(user_id,role)
       VALUES(p_target,p_new_role)
-      ON CONFLICT(user_id) DO UPDATE SET role=EXCLUDED.role
+      ON CONFLICT ON CONSTRAINT community_admins_pkey DO UPDATE SET role=EXCLUDED.role
       WHERE public.community_admins.role<>'owner';
   END IF;
   INSERT INTO public.portal_account_audit(actor_user_id,target_user_id,action,details)
@@ -182,7 +182,7 @@ END;
 $fn$;
 
 
-CREATE FUNCTION public.portal_change_status(p_actor uuid,p_target uuid,p_new_status text)
+CREATE OR REPLACE FUNCTION public.portal_change_status(p_actor uuid,p_target uuid,p_new_status text)
 RETURNS TABLE(user_id uuid,portal_status text)
 LANGUAGE plpgsql
 SECURITY INVOKER
