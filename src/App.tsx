@@ -350,7 +350,7 @@ function App() {
     event.preventDefault();
     if (recoveryBusy) return;
     const address = recoveryEmail.trim().toLowerCase();
-    if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(address)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
       setNotice({kind:'error',text:'Enter your existing ASYLUM staff email.'});
       return;
     }

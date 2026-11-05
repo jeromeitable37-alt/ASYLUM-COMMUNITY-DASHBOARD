@@ -53,27 +53,14 @@ export async function readVerifiedBrowserSession(): Promise<PortalSession | null
  * gateway. Some Neon SDK versions implement resetPassword with an incorrect
  * route. Never send the password or OTP to logs or non-Neon services.
  */
-async function postNeonPasswordReset(path: 'request-password-reset' | 'reset-password', payload: object) {
-  const response = await fetch('/api/neon-auth/email-otp/' + path, {
-    method: 'POST',
-    credentials: 'same-origin',
-    cache: 'no-store',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload),
-  });
-  const result = await response.json().catch(() => null) as { error?: {message?: string} | string; message?: string } | null;
-  if (!response.ok) {
-    throw new Error(typeof result?.error === 'string' ? result.error :
-      result?.error?.message || result?.message || 'Neon password reset request could not be completed.');
-  }
-}
-
 export async function requestNeonPasswordResetCode(email: string) {
-  await postNeonPasswordReset('request-password-reset', { email });
+  const { error } = await neonEmailAuth.forgetPassword.emailOtp({ email });
+  if (error) throw new Error(error.message || 'Unable to request a Neon password-reset code.');
 }
 
 export async function finishNeonPasswordReset(email: string, otp: string, password: string) {
-  await postNeonPasswordReset('reset-password', { email, otp, password });
+  const { error } = await neonEmailAuth.emailOtp.resetPassword({ email, otp, password });
+  if (error) throw new Error(error.message || 'Unable to reset the Neon password.');
 }
 
 export function savePendingRegistration(draft: {
