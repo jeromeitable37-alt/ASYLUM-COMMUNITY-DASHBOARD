@@ -7,3 +7,10 @@
 @media(max-width:740px){.asy-user-toolbar{grid-template-columns:minmax(0,1fr)}.asy-user-filter{min-height:44px}.asy-user-summary>div{flex-wrap:wrap;gap:6px}.asy-user-summary strong{font-size:22px}}
 @media(max-width:480px){.asy-user-management-heading{flex-direction:column}.asy-user-summary{gap:5px}.asy-user-summary>div{padding:9px;gap:4px}.asy-user-summary span{width:100%;font-size:7px}.asy-user-summary svg{width:13px}.asy-user-summary strong{font-size:20px}.asy-user-cards{grid-template-columns:1fr}.asy-user-card{padding:15px}}
 @media(prefers-reduced-motion:reduce){.asy-user-card{transition:none}.asy-user-card:hover{transform:none}}
+.asy-staff-password-form{border-top:1px solid #56404b;padding-top:10px;margin-top:10px;display:grid;gap:7px}
+.asy-staff-password-form label{font-size:10px;letter-spacing:.025em;color:#e4cbd5;font-weight:800}
+.asy-staff-password-row{display:flex;flex-wrap:wrap;gap:8px}
+.asy-staff-password-row input{flex:1;min-width:120px;width:100%;border:1px solid #775463;border-radius:8px;background:#1b1520;color:#fff;padding:10px;font-size:12px}
+.asy-staff-password-row button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;padding:10px 12px;border:1px solid #8c5067;background:#59263c;color:#fff;font-size:11px;font-weight:700}
+.asy-staff-password-row button:disabled{opacity:.5}
+.asy-staff-password-form small{color:#c7b3bd;line-height:1.5}

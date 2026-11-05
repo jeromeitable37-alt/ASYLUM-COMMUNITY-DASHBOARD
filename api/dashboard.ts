@@ -124,6 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                ap.status AS application_status,
                (m.id IS NOT NULL) AS has_member_profile,
                (ap.id IS NOT NULL) AS has_application,
+               (SELECT u.id::text FROM neon_auth."user" u WHERE lower(u.email)=lower(i.email) LIMIT 1) AS neon_auth_user_id,
                EXISTS(SELECT 1 FROM neon_auth."user" u WHERE lower(u.email)=lower(i.email)) AS has_neon_login,
                EXISTS(SELECT 1 FROM neon_auth."user" u WHERE lower(u.email)=lower(i.email) AND u."emailVerified"=true AND u.banned IS NOT TRUE) AS neon_verified,
                EXISTS(SELECT 1 FROM public.portal_auth_migration_links l WHERE l.dashboard_user_id=i.user_id) AS neon_linked
