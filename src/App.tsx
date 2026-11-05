@@ -354,7 +354,7 @@ function App() {
   const resumeEmailVerification = async () => {
     if (resendBusy) return;
     const address = email.trim().toLowerCase();
-    if (!address || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(address)) {
+    if (!address || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) {
       setNotice({kind:'error',text:'Enter the email address you used to register.'});
       return;
     }
