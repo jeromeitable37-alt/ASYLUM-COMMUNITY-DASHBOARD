@@ -85,9 +85,17 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     setBusy(user.user_id); setNotice(null);
     try {
       await accountApi('user_role', { user_id: user.user_id, role: nextRole });
-      setAccounts(current => current.map(item => item.user_id === user.user_id ? { ...item, role: nextRole as PortalUser['role'] } : item));
+      // Read back the actual saved role instead of claiming success based
+      // solely on the POST response. Reload all account cards and role drafts.
+      const latest = await accountApi<PortalUser[]>('users');
+      const persisted = latest.find(item => item.user_id === user.user_id);
+      setAccounts(latest);
+      setDraftRoles(Object.fromEntries(latest.map(item => [item.user_id, item.role])));
+      if (!persisted || persisted.role !== nextRole) {
+        throw new Error('The database did not confirm the requested role. Refresh and check again.');
+      }
       onRoleUpdated?.();
-      setNotice({ type: 'success', message: `Role updated for ${user.ign || user.display_name}.` });
+      setNotice({ type: 'success', message: `Role saved and confirmed for ${user.ign || user.display_name}.` });
     } catch (error) {
       setDraftRoles(current => ({ ...current, [user.user_id]: user.role }));
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not save role.' });
