@@ -146,8 +146,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const description = str(body.description,400);
       const logo = optionalUrl(body.logo_url);
       const captain = readId(body.captain_member_id);
-      const memberIds: string[] = Array.isArray(body.member_ids) ? [...new Set(body.member_ids)] : [];
-      if (memberIds.length > 100 || memberIds.some(x=>!isUuid(x))) return res.status(400).json({ error: 'Invalid team member list.' });
+      // Validate untrusted values before treating the roster as UUID strings.
+      const rawMemberIds: unknown[] = Array.isArray(body.member_ids) ? body.member_ids : [];
+      if (rawMemberIds.length > 100 || rawMemberIds.some(x => !isUuid(x)))
+        return res.status(400).json({ error: 'Invalid team member list.' });
+      const memberIds: string[] = [...new Set(rawMemberIds.filter(isUuid))];
       if (captain && !memberIds.includes(captain)) memberIds.push(captain);
       const teamId = id || randomUUID();
       // Team metadata and its roster are committed together or rolled back together.
