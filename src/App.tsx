@@ -4,7 +4,7 @@ import {
   Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint,
   LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
-import { neonEmailAuth, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
+import { neonEmailAuth, readVerifiedBrowserSession, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
 import type { PortalSession } from './lib/portal-auth';
 import { uploadPortalImage } from './lib/portal-images';
 import { readApiEnvelope } from './lib/read-api';
@@ -94,12 +94,26 @@ function App() {
 
   useEffect(() => {
     let mounted = true;
-    void neonEmailAuth.getSession()
-      .then(({data}) => {
-        if (mounted) setSession(data?.user
-          ? {user:{id:data.user.id,email:data.user.email}} : null);
+    // Do not trust a cached SDK session from the previous cross-origin login.
+    // Only the server-visible first-party cookie can unlock the Dashboard.
+    void readVerifiedBrowserSession()
+      .then(verified => {
+        if (!mounted) return;
+        setSession(verified);
+        if (!verified) {
+          setAuthMode('signin');
+          setShowAuth(true);
+          setProfileLoadState('idle');
+          setNotice({kind:'info',text:'Sign in to reconnect your existing ASYLUM account. Your Owner role and member records are safe; you do not need to register again.'});
+        }
       })
-      .catch(() => { if (mounted) setSession(null); });
+      .catch(() => {
+        if (!mounted) return;
+        setSession(null);
+        setAuthMode('signin');
+        setShowAuth(true);
+        setNotice({kind:'error',text:'Unable to contact the Neon session service. Your account has not been changed.'});
+      });
     return () => {mounted = false;};
   }, []);
 
@@ -165,8 +179,20 @@ function App() {
         }
       } catch (error) {
         if (active) {
-          if (session?.user) setProfileLoadState('error');
-          setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Could not load dashboard data.' });
+          const detail = error instanceof Error ? error.message : 'Could not load dashboard data.';
+          if (/first-party Neon login session is missing|Neon did not return an active session|Neon session has expired|Sign in to your verified Neon account|Neon login session is missing/i.test(detail)) {
+            setSession(null);
+            setDashboardUserId(null);
+            setCurrentRole(null);
+            setIsAdmin(false);
+            setProfileLoadState('idle');
+            setAuthMode('signin');
+            setShowAuth(true);
+            setNotice({ kind: 'info', text: 'Your login session needs reconnecting. Sign in with your existing account; do not register again.' });
+          } else {
+            if (session?.user) setProfileLoadState('error');
+            setNotice({ kind: 'error', text: detail });
+          }
         }
       }
     };
@@ -249,16 +275,15 @@ function App() {
             '. Use Resend verification code later. Do not register again.'});
         }
       } else {
-        // Sign in and read the same native Neon Auth client used for JWTs.
-        const { data, error } = await neonEmailAuth.signIn.email({email: normalizedEmail, password});
+        // Neon Auth verifies the password. Before showing "signed in", verify
+        // the first-party HTTP-only cookie is visible to our own API server.
+        const { error } = await neonEmailAuth.signIn.email({email: normalizedEmail, password});
         if (error) throw new Error(error.message || 'Neon sign-in failed.');
-        const current = await neonEmailAuth.getSession();
-        const currentUser = current.data?.user || data?.user;
-        if (!currentUser?.id) throw new Error('Neon sign-in did not establish an account session.');
-        setSession({user:{id:currentUser.id,email:currentUser.email}});
-        setPassword('');
-        setConfirmationEmail(null);
-        setShowAuth(false);
+        const verified = await readVerifiedBrowserSession();
+        if (!verified?.user?.id || verified.user.email?.toLowerCase() !== normalizedEmail) {
+          throw new Error('Neon accepted the sign-in but no first-party session was created. Your account is safe; please contact management if this persists.');
+        }
+        const currentUser = verified.user;
         const draft = readPendingRegistration();
         if (draft && draft.email.toLowerCase() === normalizedEmail) {
           try {
@@ -281,19 +306,14 @@ function App() {
             throw profileError;
           }
         }
-        try {
-          await dashboard('profile');
-        } catch (profileError) {
-          const message = profileError instanceof Error ? profileError.message : 'Dashboard identity is not ready.';
-          if (/verify your Neon Auth email/i.test(message)) {
-            setConfirmationEmail(normalizedEmail);
-            setShowAuth(true);
-          } else if (/Owner-approved Neon Auth migration link/i.test(message)) {
-            setShowAuth(true);
-          }
-          throw new Error(message);
-        }
-        setNotice({kind:'success',text:'Signed in with Neon Auth. Your application is connected to the Official Dashboard.'});
+        // The authenticated Dashboard API must also accept the canonical
+        // account mapping before a successful sign-in is displayed.
+        await dashboard('profile');
+        setSession(verified);
+        setPassword('');
+        setConfirmationEmail(null);
+        setShowAuth(false);
+        setNotice({kind:'success',text:'Your verified Neon account is connected to the Official Dashboard.'});
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Authentication failed. Please retry.';

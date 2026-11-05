@@ -95,6 +95,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const cookies = upstream.headers.getSetCookie();
+    // Metadata only: never log passwords, tokens, cookie contents, email, or UID.
+    if (authPath === 'sign-in/email') {
+      console.info('Neon preview auth gateway:', {
+        upstreamStatus: upstream.status,
+        setCookieCount: cookies.length,
+        sameOrigin: req.headers.origin === 'https://' + req.headers.host,
+      });
+    }
     if (cookies.length) {
       // Never allow upstream Domain/Path to bind these cookies to neon.tech;
       // these are first-party cookies on this Vercel host.

@@ -21,6 +21,32 @@ export type PortalSession = {
   user: { id: string; email?: string | null };
 };
 
+/**
+ * The only session state used to unlock the dashboard UI.
+ * Read the HTTP-only first-party cookie via the proxy rather than trusting
+ * cached Neon client data or a prior third-party Preview session.
+ */
+export async function readVerifiedBrowserSession(): Promise<PortalSession | null> {
+  const response = await fetch('/api/neon-auth/get-session', {
+    method: 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) throw new Error('Neon session verification is temporarily unavailable.');
+  const data = await response.json() as {
+    session?: unknown;
+    user?: { id?: unknown; email?: unknown };
+  } | null;
+  const user = data?.user;
+  if (!data?.session || typeof user?.id !== 'string' || !user.id ||
+      typeof user.email !== 'string' || !user.email.includes('@')) {
+    return null;
+  }
+  return { user: { id: user.id, email: user.email } };
+}
+
+
 export function savePendingRegistration(draft: {
   email: string; display_name: string; ign: string; uid: string; streamer_mode_id: string;
 }) {
