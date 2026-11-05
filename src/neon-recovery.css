@@ -100,7 +100,7 @@
   padding: 0 14px; background: #0f0d14;
   border: 1px solid #634356;
   border-radius: 9px; color: #fff;
-  font: 500 15px/1.4 inherit; outline: none;
+  font-family: inherit; font-size: 15px; font-weight: 500; line-height: 1.4; outline: none;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 .cyber-account-card .asy-auth-field input:focus {
