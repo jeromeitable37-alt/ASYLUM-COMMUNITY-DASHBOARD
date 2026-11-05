@@ -90,7 +90,8 @@ function App() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
-    portalAuth.getSession().then(({ data }) => setSession((data.session || null) as PortalSession | null));
+    portalAuth.getSession().then(({ data }) => setSession((data.session || null) as PortalSession | null))
+      .catch(() => setSession(null));
     const { data: listener } = portalAuth.onAuthStateChange((_event, nextSession) => setSession((nextSession || null) as PortalSession | null));
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -195,11 +196,13 @@ function App() {
           email: normalizedEmail, display_name: cleanName,
           ign: cleanIgn, uid: cleanUid, streamer_mode_id: cleanStreamerId,
         });
-        const { error } = await portalAuth.signUp({
-          email: normalizedEmail, password,
-          options: { data: { name: cleanName } },
+        // The Supabase-compatible adapter expects a session immediately after signup.
+        // With required Neon verification, a new user has no session yet.
+        // Use the native Better Auth signup method, which returns the unverified user.
+        const { error } = await neonEmailAuth.signUp.email({
+          email: normalizedEmail, password, name: cleanName,
         });
-        if (error) throw error;
+        if (error) throw new Error(error.message || 'Neon signup failed.');
         setPassword('');
         setConfirmationEmail(normalizedEmail);
         setShowAuth(true);
@@ -260,7 +263,12 @@ function App() {
         setNotice({kind:'success',text:'Signed in with Neon Auth. Your application is connected to the Official Dashboard.'});
       }
     } catch (error) {
-      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Authentication failed. Please retry.'});
+      const detail = error instanceof Error ? error.message : 'Authentication failed. Please retry.';
+      if (authMode === 'signup' && /failed to retrieve user session/i.test(detail)) {
+        setConfirmationEmail(email.trim().toLowerCase());
+        setPassword('');
+        setNotice({kind:'info',text:'Neon may have created your account without a session. Do not register again. Use Resend code and verify the email below.'});
+      } else setNotice({kind:'error',text:detail});
     } finally { setBusy(false); }
   };
 
@@ -341,6 +349,28 @@ function App() {
     } catch (error) {
       setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to change your password.'});
     } finally {setSecurityBusy(false);}
+  };
+
+  const resumeEmailVerification = async () => {
+    if (resendBusy) return;
+    const address = email.trim().toLowerCase();
+    if (!address || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(address)) {
+      setNotice({kind:'error',text:'Enter the email address you used to register.'});
+      return;
+    }
+    setConfirmationEmail(address);
+    setPassword('');
+    setNotice(null);
+    setResendBusy(true);
+    try {
+      const {error} = await neonEmailAuth.emailOtp.sendVerificationOtp({
+        email:address, type:'email-verification',
+      });
+      if (error) throw new Error(error.message || 'Could not request verification code.');
+      setNotice({kind:'info',text:'If your Neon account still needs verification, a code has been requested. Check your Inbox or Spam. Do not create another account.'});
+    } catch (error) {
+      setNotice({kind:'error',text:error instanceof Error ? error.message : 'Unable to request a verification code.'});
+    } finally {setResendBusy(false);}
   };
 
   const resendConfirmation = async () => {
@@ -673,7 +703,7 @@ function App() {
                     <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Already verified? Sign in</button>
                   </div>
                 </div>}
-                {!recoveryMode && <form className="member-form" onSubmit={submitAuth}>
+                {!recoveryMode && !confirmationEmail && <form className="member-form" onSubmit={submitAuth}>
                   {authMode === 'signup' && <>
                     <label htmlFor="display-name">FULL NAME</label><input id="display-name" required minLength={2} maxLength={60} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
                     <label htmlFor="ign">IN-GAME NAME (IGN)</label><input id="ign" required minLength={2} maxLength={40} value={ign} onChange={e => setIgn(e.target.value)} placeholder="Your exact IGN" />
@@ -689,6 +719,7 @@ function App() {
                   {notice?.kind === 'error' && <div className="auth-error-inline" role="alert"><X size={14} /> {notice.text}</div>}
                   <button className="button-primary form-submit auth-neon-submit" type="submit" disabled={busy}>{busy ? 'Securing your session…' : authMode === 'signup' ? 'Create ASYLUM profile' : 'Access community'} <ArrowUpRight size={17} /></button>
                 </form>}
+                {authMode === 'signup' && !recoveryMode && !confirmationEmail && <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}><ShieldCheck size={15} /> Already registered but need to verify? Send code</button>}
                 {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Forgot your password?</button>}
                 {recoveryMode && <div className="asy-recovery-panel">
                   {recoveryMode === 'request'
