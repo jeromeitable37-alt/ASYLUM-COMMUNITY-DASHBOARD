@@ -755,23 +755,34 @@ function App() {
                 <div className="auth-overline"><Sparkles size={13} /> SECURE ASYLUM ACCESS / 2026</div>
                 <div className="account-card-heading"><span className="account-icon account-logo-box"><img className="account-logo-img" src="/resources/asylum-login-logo.svg" alt="Asylum Community official logo" width={56} height={56} /></span><div><h3>{recoveryMode ? 'Recover your Neon account.' : authMode === 'signup' ? 'Become part of ASYLUM' : 'Welcome back, player.'}</h3><p>{recoveryMode ? 'Reset your password using a code delivered to your registered email.' : authMode === 'signup' ? 'Create your official community profile for management review.' : 'Enter the official community dashboard.'}</p></div></div>
                 <div className="auth-switch"><button type="button" className={authMode === 'signup' && !recoveryMode ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setRecoveryMode(null); setNotice(null); }}>Register</button><button type="button" className={authMode === 'signin' && !recoveryMode ? 'selected' : ''} onClick={() => { setAuthMode('signin'); setRecoveryMode(null); setNotice(null); }}>Sign in</button></div>
-                {!recoveryMode && confirmationEmail && <div className="asy-confirm-email" role="status">
-                  <div className="asy-confirm-title"><CheckCircle2 size={18} /> Neon Auth — verify your email</div>
-                  <p>Check the email sent to <strong>{confirmationEmail}</strong> for your one-time verification code. Your membership is <strong>not</strong> submitted until your email is verified and your profile is completed.</p>
-                  <form onSubmit={confirmVerification} className="asy-neon-otp-form">
-                    <label htmlFor="neon-email-code">EMAIL VERIFICATION CODE</label>
-                    <input id="neon-email-code" type="text" inputMode="numeric" pattern="[0-9]{6,8}"
-                      required minLength={6} maxLength={8} autoComplete="one-time-code" placeholder="6-digit code"
-                      value={emailOtp} onChange={e=>setEmailOtp(e.target.value.replace(/[^0-9]/g,''))}/>
-                    <button className="button-primary form-submit" type="submit" disabled={verifyBusy}>
-                      {verifyBusy ? 'Verifying…' : 'Verify Neon email'} <ArrowRight size={16} />
+                {!recoveryMode && confirmationEmail && <section className="asy-confirm-email asy-auth-step" aria-labelledby="asy-verify-email-heading">
+                  <div className="asy-auth-step-heading">
+                    <span className="asy-auth-step-symbol"><ShieldCheck size={21}/></span>
+                    <div>
+                      <span className="asy-auth-step-eyebrow">ACCOUNT VERIFICATION</span>
+                      <h4 id="asy-verify-email-heading">Check your email</h4>
+                      <p className="asy-auth-step-description">Enter the verification code to activate your ASYLUM account.</p>
+                    </div>
+                  </div>
+                  <div className="asy-auth-email-address"><span>Code sent to</span><strong>{confirmationEmail}</strong></div>
+                  <form onSubmit={confirmVerification} className="asy-neon-otp-form asy-auth-step-form">
+                    <div className="asy-auth-field">
+                      <label htmlFor="neon-email-code">Verification code</label>
+                      <input id="neon-email-code" className="asy-auth-otp-input" type="text" inputMode="numeric" pattern="[0-9]{6,8}"
+                        required minLength={6} maxLength={8} autoComplete="one-time-code" placeholder="000000"
+                        aria-describedby="neon-email-code-help" value={emailOtp}
+                        onChange={e=>setEmailOtp(e.target.value.replace(/[^0-9]/g,'').slice(0,8))}/>
+                      <small id="neon-email-code-help" className="asy-auth-field-help">Enter the 6–8 digit code from your email. Check Spam if needed.</small>
+                    </div>
+                    <button className="button-primary form-submit asy-auth-action" type="submit" disabled={verifyBusy}>
+                      {verifyBusy ? 'Verifying email…' : 'Verify email'} <ArrowRight size={16} />
                     </button>
                   </form>
-                  <div className="asy-confirm-actions">
-                    <button type="button" disabled={resendBusy} onClick={() => void resendConfirmation()}>{resendBusy ? 'Sending…' : 'Resend code'}</button>
-                    <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Already verified? Sign in</button>
+                  <div className="asy-confirm-actions asy-auth-secondary-actions">
+                    <button type="button" disabled={resendBusy} onClick={() => void resendConfirmation()}>{resendBusy ? 'Requesting…' : 'Resend code'}</button>
+                    <button type="button" onClick={() => { setAuthMode('signin'); setConfirmationEmail(null); setNotice(null); }}>Back to sign in</button>
                   </div>
-                </div>}
+                </section>}
                 {!recoveryMode && !confirmationEmail && <form className="member-form" onSubmit={submitAuth}>
                   {authMode === 'signup' && <>
                     <label htmlFor="display-name">FULL NAME</label><input id="display-name" required minLength={2} maxLength={60} value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Your name" />
@@ -790,29 +801,72 @@ function App() {
                 </form>}
                 {authMode === 'signup' && !recoveryMode && !confirmationEmail && <button type="button" className="asy-recovery-link" onClick={() => void resumeEmailVerification()} disabled={resendBusy}><ShieldCheck size={15} /> Already registered but need to verify? Send code</button>}
                 {authMode === 'signin' && !recoveryMode && <button type="button" className="asy-recovery-link" onClick={beginPasswordRecovery}><LockKeyhole size={15} /> Activate existing Neon account / Set password</button>}
-                {recoveryMode && <div className="asy-recovery-panel">
+                {recoveryMode && <div className="asy-recovery-panel asy-auth-step">
                   {recoveryMode === 'request'
-                    ? <form className="asy-recovery-form" onSubmit={requestPasswordResetCode}>
-                        <h4><LockKeyhole size={19}/> Activate or recover your Neon account</h4>
-                        <p>Use the email registered with ASYLUM. A verification code sent by Neon lets you set a new Neon-only password. Your existing IGN, membership and staff role stay in Neon; no Recruitment account is changed.</p>
-                        <label htmlFor="recovery-email">REGISTERED EMAIL</label>
-                        <input id="recovery-email" type="email" autoComplete="email" required maxLength={256} value={recoveryEmail} onChange={event => setRecoveryEmail(event.target.value)} placeholder="you@example.com"/>
-                        <button type="submit" className="button-primary form-submit" disabled={recoveryBusy}>{recoveryBusy ? 'Requesting code…' : 'Send password reset code'} <ArrowRight size={17}/></button>
+                    ? <form className="asy-recovery-form asy-auth-step-form" onSubmit={requestPasswordResetCode}>
+                        <div className="asy-auth-step-heading">
+                          <span className="asy-auth-step-symbol"><LockKeyhole size={21}/></span>
+                          <div>
+                            <span className="asy-auth-step-eyebrow">ACCOUNT RECOVERY</span>
+                            <h4>Activate or reset password</h4>
+                            <p className="asy-auth-step-description">Use your registered ASYLUM email to request a verification code.</p>
+                          </div>
+                        </div>
+                        <div className="asy-auth-field">
+                          <label htmlFor="recovery-email">Registered email</label>
+                          <input id="recovery-email" type="email" autoComplete="email" required maxLength={256}
+                            value={recoveryEmail} onChange={event => setRecoveryEmail(event.target.value)}
+                            placeholder="name@example.com"/>
+                          <small className="asy-auth-field-help">Your membership and staff permissions will stay the same.</small>
+                        </div>
+                        <button type="submit" className="button-primary form-submit asy-auth-action" disabled={recoveryBusy}>
+                          {recoveryBusy ? 'Requesting code…' : 'Send verification code'} <ArrowRight size={17}/>
+                        </button>
                       </form>
-                    : <form className="asy-recovery-form" onSubmit={finishPasswordRecovery}>
-                        <h4><ShieldCheck size={19}/> Verify and set a new password</h4>
-                        <p>Enter the code sent to <strong>{recoveryEmail}</strong>. Your Admin/Member role and IGN will not change.</p>
-                        <label htmlFor="recovery-code">EMAIL RESET CODE</label>
-                        <input id="recovery-code" type="text" inputMode="numeric" pattern="[0-9]{6,8}" minLength={6} maxLength={8} required autoComplete="one-time-code" value={recoveryCode} onChange={event=>setRecoveryCode(event.target.value.replace(/[^0-9]/g,''))} placeholder="6-digit code"/>
-                        <label htmlFor="recovery-new">NEW PASSWORD</label>
-                        <input id="recovery-new" type="password" required minLength={8} autoComplete="new-password" value={recoveryPassword} onChange={event=>setRecoveryPassword(event.target.value)} placeholder="At least 8 characters"/>
-                        <label htmlFor="recovery-confirm">CONFIRM NEW PASSWORD</label>
-                        <input id="recovery-confirm" type="password" required minLength={8} autoComplete="new-password" value={recoveryConfirm} onChange={event=>setRecoveryConfirm(event.target.value)} placeholder="Enter password again"/>
-                        <button type="submit" className="button-primary form-submit" disabled={recoveryBusy}>{recoveryBusy ? 'Updating password…' : 'Reset my password'} <ShieldCheck size={17}/></button>
-                        <button type="button" className="asy-recovery-link" onClick={()=> { setRecoveryMode('request'); setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm(''); setNotice(null); }}>Request a new code or change email</button>
+                    : <form className="asy-recovery-form asy-auth-step-form" onSubmit={finishPasswordRecovery}>
+                        <div className="asy-auth-step-heading">
+                          <span className="asy-auth-step-symbol"><ShieldCheck size={21}/></span>
+                          <div>
+                            <span className="asy-auth-step-eyebrow">PASSWORD RECOVERY</span>
+                            <h4>Set a new password</h4>
+                            <p className="asy-auth-step-description">Enter the code from your email, then create your new password.</p>
+                          </div>
+                        </div>
+                        <div className="asy-auth-email-address"><span>Code sent to</span><strong>{recoveryEmail}</strong></div>
+                        <div className="asy-auth-field">
+                          <label htmlFor="recovery-code">Verification code</label>
+                          <input id="recovery-code" className="asy-auth-otp-input" type="text" inputMode="numeric"
+                            pattern="[0-9]{6,8}" minLength={6} maxLength={8} required autoComplete="one-time-code"
+                            aria-describedby="recovery-code-help" value={recoveryCode}
+                            onChange={event=>setRecoveryCode(event.target.value.replace(/[^0-9]/g,'').slice(0,8))}
+                            placeholder="000000"/>
+                          <small id="recovery-code-help" className="asy-auth-field-help">Enter the 6–8 digit code from your Neon verification email.</small>
+                        </div>
+                        <div className="asy-auth-field">
+                          <label htmlFor="recovery-new">New password</label>
+                          <input id="recovery-new" type="password" required minLength={8}
+                            autoComplete="new-password" value={recoveryPassword}
+                            onChange={event=>setRecoveryPassword(event.target.value)}
+                            placeholder="At least 8 characters"/>
+                        </div>
+                        <div className="asy-auth-field">
+                          <label htmlFor="recovery-confirm">Confirm new password</label>
+                          <input id="recovery-confirm" type="password" required minLength={8}
+                            autoComplete="new-password" value={recoveryConfirm}
+                            onChange={event=>setRecoveryConfirm(event.target.value)}
+                            placeholder="Repeat your new password"/>
+                        </div>
+                        <button type="submit" className="button-primary form-submit asy-auth-action" disabled={recoveryBusy}>
+                          {recoveryBusy ? 'Saving password…' : 'Save new password'} <ShieldCheck size={17}/>
+                        </button>
+                        <button type="button" className="asy-recovery-link asy-auth-text-link" onClick={()=> {
+                          setRecoveryMode('request'); setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm(''); setNotice(null);
+                        }}>Need another code? Change email or resend</button>
                       </form>}
                   {notice && <p className={notice.kind === 'error' ? 'asy-recovery-error' : 'asy-recovery-info'} role="status">{notice.text}</p>}
-                  <button type="button" className="asy-recovery-back" onClick={() => { setRecoveryMode(null);setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm('');setAuthMode('signin');setNotice(null); }}>Back to Sign in</button>
+                  <button type="button" className="asy-recovery-back asy-auth-text-link" onClick={() => {
+                    setRecoveryMode(null);setRecoveryCode('');setRecoveryPassword('');setRecoveryConfirm('');setAuthMode('signin');setNotice(null);
+                  }}>Back to sign in</button>
                 </div>}
                 <p className="privacy-note"><LockKeyhole size={14} /> Never share your password or UID publicly outside the official form.</p>
               </> : <div className="signed-in-panel">

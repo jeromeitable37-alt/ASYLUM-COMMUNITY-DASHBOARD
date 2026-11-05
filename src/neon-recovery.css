@@ -21,3 +21,153 @@
 .asy-recovery-panel button:focus-visible,.asy-password-security button:focus-visible{outline:2px solid #ffacc2;outline-offset:3px}
 @media(max-width:640px){.asy-recovery-panel{padding:16px 14px}.asy-recovery-form input{font-size:16px}.asy-password-security{padding:12px}}
 @media(prefers-reduced-motion:no-preference){.asy-recovery-panel{animation:asy-recovery-in .25s ease-out}@keyframes asy-recovery-in{from{opacity:.2;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}}
+
+/* Unified verification / password recovery design — Official Dashboard */
+.cyber-account-card .asy-auth-step {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 14px 0 18px;
+  padding: clamp(16px, 2.6vw, 24px);
+  border: 1px solid rgba(239, 107, 137, .32);
+  border-radius: 14px;
+  background: linear-gradient(145deg, #231721, #130f18 90%);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, .22);
+  color: #f5ecf0;
+}
+.asy-auth-step-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 17px;
+  min-width: 0;
+}
+.asy-auth-step-heading > div { min-width: 0; flex: 1; }
+.asy-auth-step-symbol {
+  width: 42px; height: 42px; flex: 0 0 42px;
+  display: grid; place-items: center;
+  color: #ff98ac; background: #472231;
+  border: 1px solid #7c4156; border-radius: 11px;
+}
+.asy-auth-step-eyebrow {
+  display: block; color: #ff9cb4; font-size: 10px;
+  font-weight: 800; letter-spacing: .12em; line-height: 1.4;
+  margin-bottom: 5px;
+}
+.cyber-account-card .asy-auth-step-heading h4 {
+  display: block; margin: 0 0 6px;
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 800; color: #fff;
+  letter-spacing: -.025em; line-height: 1.22;
+}
+.cyber-account-card .asy-auth-step-heading .asy-auth-step-description {
+  margin: 0; color: #cbbac5; font-size: 12px;
+  line-height: 1.65; font-weight: 400; overflow-wrap: anywhere;
+}
+.asy-auth-email-address {
+  display: flex; gap: 4px; flex-direction: column;
+  padding: 11px 13px; margin-bottom: 17px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 9px; background: #100e14;
+  min-width: 0;
+}
+.asy-auth-email-address span {
+  font-size: 10px; font-weight: 750;
+  color: #a995a3; letter-spacing: .06em; text-transform: uppercase;
+}
+.cyber-account-card .asy-auth-email-address strong {
+  color: #f5eaf0; font-size: 13px; font-weight: 650;
+  overflow-wrap: anywhere; line-height: 1.5;
+}
+.asy-neon-otp-form.asy-auth-step-form,
+.asy-recovery-form.asy-auth-step-form {
+  display: flex; flex-direction: column;
+  width: 100%; min-width: 0; gap: 15px;
+}
+.asy-auth-field {
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%; min-width: 0;
+}
+.cyber-account-card .asy-auth-field label,
+.asy-recovery-form .asy-auth-field label {
+  margin: 0; font-size: 11px; line-height: 1.3;
+  font-weight: 750; letter-spacing: .03em;
+  text-transform: none; color: #eed5df;
+}
+.cyber-account-card .asy-auth-field input {
+  width: 100%; min-width: 0; max-width: 100%;
+  box-sizing: border-box; height: 54px;
+  padding: 0 14px; background: #0f0d14;
+  border: 1px solid #634356;
+  border-radius: 9px; color: #fff;
+  font: 500 15px/1.4 inherit; outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.cyber-account-card .asy-auth-field input:focus {
+  border-color: #ff7d9a;
+  box-shadow: 0 0 0 3px rgba(239, 64, 99, .2);
+}
+.cyber-account-card .asy-auth-field input::placeholder {
+  color: #907c89; opacity: 1;
+}
+.cyber-account-card .asy-auth-field input.asy-auth-otp-input {
+  height: 64px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: clamp(20px, 3.2vw, 25px);
+  line-height: 1;
+  letter-spacing: .24em;
+  text-align: center;
+  padding: 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+.asy-auth-field-help {
+  display: block; color: #ab99a7;
+  font-size: 11px; line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.cyber-account-card .asy-auth-step .asy-auth-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 9px; width: 100%; min-height: 50px;
+  margin: 4px 0 0; border-radius: 9px;
+  font-size: 13px; font-weight: 750;
+}
+.cyber-account-card .asy-auth-secondary-actions {
+  display: grid; grid-template-columns: 1fr 1fr;
+  align-items: stretch; gap: 10px;
+  margin-top: 13px;
+}
+.cyber-account-card .asy-auth-secondary-actions button {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 44px; width: 100%;
+  border: 1px solid #704352;
+  background: #22151e; color: #f4dce5;
+  border-radius: 8px; font-size: 12px; font-weight: 650;
+  text-align: center; padding: 10px 12px;
+}
+.cyber-account-card .asy-auth-secondary-actions button:hover {
+  background: #37202a; border-color: #a25b72;
+}
+.cyber-account-card .asy-auth-secondary-actions button:disabled {
+  opacity: .55; cursor: wait;
+}
+.cyber-account-card .asy-auth-step .asy-auth-text-link {
+  margin: 8px 0 0; align-self: flex-start;
+  color: #f1afc1; padding: 6px 0;
+  font-size: 12px; line-height: 1.5;
+}
+.cyber-account-card .asy-auth-step .asy-recovery-info,
+.cyber-account-card .asy-auth-step .asy-recovery-error {
+  margin-top: 15px; margin-bottom: 0;
+}
+@media (max-width: 530px) {
+  .cyber-account-card .asy-auth-step { padding: 16px; }
+  .asy-auth-step-heading { gap: 10px; }
+  .asy-auth-step-symbol { width: 38px; height: 38px; flex-basis: 38px; }
+  .cyber-account-card .asy-auth-secondary-actions { grid-template-columns: 1fr; }
+  .cyber-account-card .asy-auth-field input.asy-auth-otp-input {
+    font-size: 22px; letter-spacing: .16em;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cyber-account-card .asy-auth-field input { transition: none; }
+}
