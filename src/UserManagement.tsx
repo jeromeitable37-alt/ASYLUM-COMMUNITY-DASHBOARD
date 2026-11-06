@@ -207,7 +207,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
 
   return <section className="asy-user-management" id="user-management" aria-labelledby="asy-user-management-title">
     <div className="asy-user-management-heading">
-      <div><div className="asy-user-kicker"><UserRoundCog size={15}/> OWNER ACCESS / ACCOUNT CONTROL</div>
+      <div><div className="asy-user-kicker"><UserRoundCog size={15}/> MANAGEMENT ACCESS / ACCOUNT CONTROL</div>
         <h3 id="asy-user-management-title">User <span>Management.</span></h3>
         <p>Staff accounts and community registrations, organized in one place.</p>
       </div>
@@ -305,7 +305,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
       onMouseDown={event=>{if(event.target===event.currentTarget && !busy)setEditingStaff(null);}}>
       <section className="asy-user-modal" role="dialog" aria-modal="true" aria-labelledby="asy-edit-staff-title">
         <div className="asy-user-modal-heading">
-          <div><span className="asy-user-modal-eyebrow">OWNER-ONLY</span>
+          <div><span className="asy-user-modal-eyebrow">AUTHORIZED STAFF</span>
             <h4 id="asy-edit-staff-title">Edit staff profile</h4>
             <p>{editingAccount.email}</p>
           </div>
@@ -340,7 +340,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
         onMouseDown={event=>{if(event.target===event.currentTarget && !busy)setManagingUserId(null);}}>
         <section className="asy-user-modal" role="dialog" aria-modal="true" aria-labelledby="asy-manage-account-title">
           <div className="asy-user-modal-heading">
-            <div><span className="asy-user-modal-eyebrow">OWNER-ONLY</span>
+            <div><span className="asy-user-modal-eyebrow">AUTHORIZED STAFF</span>
               <h4 id="asy-manage-account-title">Manage account</h4>
               <p>{managingAccount.email}</p>
             </div>

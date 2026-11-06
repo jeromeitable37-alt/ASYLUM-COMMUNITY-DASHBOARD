@@ -37,6 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const role = roles[0]?.role as string | undefined;
     const manager = role === 'owner' || role === 'management' || role === 'admin' || role === 'moderator';
     const owner = role === 'owner';
+    const accountManager = owner || role === 'management' || role === 'admin';
     if (req.method === 'POST' && action === 'bootstrap') {
       const displayName = safeName(payload.display_name || user.user_metadata.display_name);
       const ign = safeName(payload.ign,40);
@@ -109,12 +110,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ data: { applications, members } });
     }
     if (req.method === 'GET' && action === 'admins') {
-      if (!owner) return res.status(403).json({ error: 'Owner access required.' });
+      if (!accountManager) return res.status(403).json({ error: 'Management or Admin access required.' });
       const rows = await sql`SELECT a.user_id,i.email,a.role,a.created_at,a.photo_url FROM community_admins a LEFT JOIN identities i ON i.user_id=a.user_id ORDER BY a.created_at`;
       return res.json({ data: rows });
     }
     if (req.method === 'GET' && action === 'users') {
-      if (!owner) return res.status(403).json({ error: 'Owner access required.' });
+      if (!accountManager) return res.status(403).json({ error: 'Management or Admin access required.' });
       const rows = await sql`
         SELECT i.user_id,i.email,i.portal_status,i.created_at,
                COALESCE(NULLIF(sp.display_name,''),NULLIF(m.display_name,''),NULLIF(ap.display_name,''),'Community account') AS display_name,
@@ -140,7 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ data: rows });
     }
     if (req.method === 'POST' && action === 'staff_profile') {
-      if (!owner) return res.status(403).json({error:'Owner access required.'});
+      if (!accountManager) return res.status(403).json({error:'Management or Admin access required.'});
       if (!isUuid(payload.user_id) || payload.user_id === userId)
         return res.status(400).json({error:'Choose an existing Management/Admin account other than Owner.'});
       if (typeof payload.display_name !== 'string' || typeof payload.ign !== 'string')
@@ -171,7 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           INSERT INTO public.portal_account_audit(actor_user_id,target_user_id,action,details)
           SELECT ${userId}::uuid,saved.user_id::uuid,'staff_profile_update',
             jsonb_build_object('fields',jsonb_build_array('display_name','ign'),
-              'source','dashboard_owner_control')
+              'source','dashboard_staff_control')
           FROM saved RETURNING id
         )
         SELECT saved.user_id,saved.display_name,saved.ign FROM saved JOIN audited ON true`;
@@ -180,7 +181,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({data:rows[0]});
     }
     if (req.method === 'POST' && action === 'link_staff_neon') {
-      if (!owner) return res.status(403).json({error:'Owner access required.'});
+      if (!accountManager) return res.status(403).json({error:'Management or Admin access required.'});
       if (!isUuid(payload.user_id) || payload.user_id===userId)
         return res.status(400).json({error:'Choose another existing staff account.'});
       const staff=await sql`SELECT i.email,i.portal_status,a.role
@@ -226,7 +227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({data:{linked:true}});
     }
     if (req.method === 'POST' && action === 'user_role') {
-      if (!owner) return res.status(403).json({ error: 'Owner access required.' });
+      if (!accountManager) return res.status(403).json({ error: 'Management or Admin access required.' });
       if (!isUuid(payload.user_id) || payload.user_id === userId)
         return res.status(400).json({error:'Choose a registered account other than the current Owner.'});
       const newRole = String(payload.role || '');
@@ -239,7 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({data:changed[0]});
     }
     if (req.method === 'POST' && action === 'user_status') {
-      if (!owner) return res.status(403).json({error:'Owner access required.'});
+      if (!accountManager) return res.status(403).json({error:'Management or Admin access required.'});
       if (!isUuid(payload.user_id) || payload.user_id === userId)
         return res.status(400).json({error:'The Owner account cannot be archived or disabled.'});
       const newStatus = String(payload.portal_status || '');
@@ -356,8 +357,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // These phrases are deliberately authored in the isolated Neon procedures.
     // Return only known safe errors, never internal SQL/connection diagnostics.
     const safePortalMessages = [
-      'Only the active Owner can change roles.',
-      'Only the active Owner can update account access.',
+      'Only an active Owner, Management or Admin can change roles.',
+      'Only an active Owner, Management or Admin can update account access.',
       'The Owner account is protected.',
       'Owner role is protected.',
       'Owner account cannot be archived or disabled.',

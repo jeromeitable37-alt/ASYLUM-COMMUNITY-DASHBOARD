@@ -694,7 +694,7 @@ function App() {
           <button onClick={() => scrollTo('gallery')}>Gallery</button>
           <button onClick={() => scrollTo('recruitment-intro')}>Recruitment</button>
           <button onClick={() => scrollTo('jersey-intro')}>Jerseys</button>
-          {currentRole === 'owner' && <button onClick={() => scrollTo('user-management')}>Users</button>}
+          {(currentRole === 'owner' || currentRole === 'management' || currentRole === 'admin') && <button onClick={() => scrollTo('user-management')}>Users</button>}
           {isAdmin && <button onClick={() => scrollTo('manage-community')}>Edit Website</button>}
           {isAdmin && <button onClick={() => scrollTo('admin-panel')}>Applications</button>}
           <button className="nav-cta" onClick={() => { if (session) { setShowAuth(false); scrollTo('account'); } else { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); } }}>
@@ -1078,8 +1078,9 @@ function App() {
             {applications.filter(item => item.status === 'pending').length === 0 && <div className="empty-state"><CheckCircle2 size={25} /><h3>No pending applications</h3><p>New applications will appear here after members register.</p></div>}
           </div>
           <div className="admin-records"><h3>Recent applications</h3>{applications.slice(0, 8).map(item => <div className="admin-record" key={item.id}><span>{item.ign} <small>· {item.uid}</small></span><span className={'status-text ' + item.status}>{item.status}</span></div>)}</div>
-          {currentRole === 'owner' && <div className="owner-tools">
+          {(currentRole === 'owner' || currentRole === 'management' || currentRole === 'admin') && <div className="owner-tools">
             <UserManagement currentUserId={dashboardUserId} onRoleUpdated={() => { void dashboard<AdminAccount[]>('admins').then(setAdminAccounts).catch(() => {}); }} />
+            {currentRole === 'owner' && <>
             <div className="owner-form">
               <h3>Transfer existing profile photos to Neon Storage</h3>
               <p>Copies only public ASYLUM images to Neon Main, updates official Neon records and leaves the old shared storage untouched.</p>
@@ -1088,6 +1089,7 @@ function App() {
               </button>
             </div>
             <form className="owner-form transfer-form" onSubmit={transferOwnership}><label htmlFor="transfer-email">TRANSFER COMMUNITY OWNERSHIP</label><p>The new Owner must already have a registered account. Your account will automatically become a Management Admin after transfer.</p><input id="transfer-email" type="email" required value={transferEmail} onChange={e => setTransferEmail(e.target.value)} placeholder="newowner@example.com" /><button className="transfer-button" type="submit" disabled={busy}>Transfer ownership <Crown size={16} /></button></form>
+            </>}
           </div>}
         </section>}
 
