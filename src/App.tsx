@@ -11,6 +11,7 @@ import { readApiEnvelope } from './lib/read-api';
 import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
+import InstallAppButton from './InstallAppButton';
 import PhotoCropper from './PhotoCropper';
 import './auth-cyber.css';
 import './neon-recovery.css';
@@ -719,6 +720,7 @@ function App() {
           {(currentRole === 'owner' || currentRole === 'management' || currentRole === 'admin') && <button onClick={() => scrollTo('user-management')}>Users</button>}
           {isAdmin && <button onClick={() => scrollTo('manage-community')}>Edit Website</button>}
           {isAdmin && <button onClick={() => scrollTo('admin-panel')}>Applications</button>}
+          <InstallAppButton />
           <button className="nav-cta" onClick={() => { if (session) { setShowAuth(false); scrollTo('account'); } else { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); } }}>
             {session ? 'My account' : 'Member access'} <ArrowUpRight size={15} />
           </button>

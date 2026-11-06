@@ -1,0 +1,12 @@
+.nav-links .asy-install-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #bd526d;border-radius:8px;padding:9px 11px;color:#ffe0e8;background:#3b1b2a;font-weight:800;white-space:nowrap;cursor:pointer}
+.nav-links .asy-install-button:hover{border-color:#ff809d;background:#592337}
+.asy-install-backdrop{position:fixed;inset:0;z-index:9999;background:#070509db;display:flex;align-items:center;justify-content:center;padding:16px}
+.asy-install-dialog{position:relative;width:min(100%,400px);max-height:calc(100dvh - 30px);overflow-y:auto;background:#1c121b;color:#fff;border:1px solid #a05770;border-radius:15px;padding:23px;box-shadow:0 30px 80px #000d}
+.asy-install-dialog>img{display:block;width:70px;height:70px;object-fit:cover;border-radius:15px;border:1px solid #a34c6c}
+.asy-install-dialog h3{font:800 21px 'Space Grotesk',sans-serif;margin:13px 0 7px}
+.asy-install-dialog p{font-size:13px;line-height:1.65;color:#e5c4ce;margin:10px 0}
+.asy-install-dialog strong{color:#fff}
+.asy-install-dialog small{display:block;font-size:11px;line-height:1.65;color:#c8a8b6;margin:8px 0 16px}
+.asy-install-close{position:absolute;right:15px;top:15px;display:grid;place-items:center;width:32px;height:32px;border:1px solid #805064;border-radius:8px;background:#34202c;color:#fff;cursor:pointer}
+.asy-install-understood{width:100%;padding:11px 15px;background:#e72b50;border:1px solid #ff6984;color:white;border-radius:8px;font-weight:800;cursor:pointer}
+@media(max-width:1000px){.nav-links .asy-install-button{min-height:44px;justify-content:center}}

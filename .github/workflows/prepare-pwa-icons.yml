@@ -1,0 +1,36 @@
+name: Prepare ASYLUM PWA icons
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-pwa-icons.yml'
+      - 'scripts/prepare-pwa-icons.py'
+      - 'public/resources/asylum-community-logo.jpg'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  icons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install image processor
+        run: python -m pip install 'Pillow>=11,<13'
+      - name: Create exact PNG install icons from official logo
+        run: python scripts/prepare-pwa-icons.py
+      - name: Commit app icons
+        run: |
+          git add public/icons/*.png
+          if git diff --cached --quiet; then
+            echo "Icons already match the official logo"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add official ASYLUM PWA raster icons [skip ci]"
+          git push origin HEAD:main

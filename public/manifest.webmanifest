@@ -1,0 +1,36 @@
+{
+  "name": "ASYLUM COMMUNITY — Official Dashboard",
+  "short_name": "ASYLUM",
+  "description": "The official ASYLUM COMMUNITY portal for verified members, management, recruitment links and community updates.",
+  "id": "/",
+  "start_url": "/?source=installed-app",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#0b090a",
+  "theme_color": "#0b090a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/asylum-logo.webp",
+      "sizes": "300x300",
+      "type": "image/webp",
+      "purpose": "any"
+    }
+  ]
+}
