@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
   Activity, ArrowUpRight, CheckCircle2, Crown, Fingerprint, UserRoundCog,
-  LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
+  LockKeyhole, Menu, Search, ShieldCheck, Swords, Users, X, Shirt, RefreshCw, ExternalLink, Orbit, ArrowRight, Pencil, Save, Globe2, Eye, EyeOff, Sparkles,
 } from 'lucide-react';
 import { neonEmailAuth, readVerifiedBrowserSession, requestNeonPasswordResetCode, finishNeonPasswordReset, savePendingRegistration, readPendingRegistration, clearPendingRegistration } from './lib/portal-auth';
 import type { PortalSession } from './lib/portal-auth';
@@ -621,15 +621,37 @@ function App() {
     finally { setBusy(false); }
   };
 
+  const refreshApplications = async () => {
+    const queue = await dashboard<{ applications: Application[], members: Member[] }>('queue');
+    setApplications(queue.applications);
+    setMembers(queue.members);
+  };
+  useEffect(() => {
+    if (!session?.user?.id || !isAdmin) return;
+    const recheck = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshApplications().catch(() => {/* The visible Refresh button offers a retry. */});
+      }
+    };
+    window.addEventListener('focus', recheck);
+    document.addEventListener('visibilitychange', recheck);
+    return () => {
+      window.removeEventListener('focus', recheck);
+      document.removeEventListener('visibilitychange', recheck);
+    };
+  }, [session?.user?.id, isAdmin]);
+
   const reviewApplication = async (item: Application, status: 'approved' | 'rejected') => {
     setBusy(true); setNotice(null);
     try {
       await dashboard('review', { body: { id: item.id, status } });
-      const queue = await dashboard<{ applications: Application[], members: Member[] }>('queue');
-      setApplications(queue.applications); setMembers(queue.members);
+      await refreshApplications();
       setNotice({ kind: 'success', text: status === 'approved' ? item.ign + ' is now approved and listed in the official directory.' : 'Application rejected.' });
-    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Review failed.' }); }
-    finally { setBusy(false); }
+    } catch (error) {
+      // A different manager may have already reviewed this application.
+      void refreshApplications().catch(() => {});
+      setNotice({kind:'error',text:error instanceof Error?error.message:'Review failed.'});
+    } finally { setBusy(false); }
   };
 
   const removeMember = async (member: Member) => {
@@ -1068,7 +1090,11 @@ function App() {
 
         {isAdmin && <section className="admin-section section-wrap" id="admin-panel">
           <div className="directory-heading"><div><div className="section-kicker">11 / PRIVATE MANAGEMENT</div><h2>Membership <span>applications.</span></h2></div><div className="preview-label"><span /> ADMIN ACCESS</div></div>
-          <p className="admin-intro">Approve an application to publish the member profile in the official directory. Rejected and pending applications stay out of the public roster.</p>
+          <p className="admin-intro">Approve new member applications to publish profiles in the directory. Existing staff login access is separate from member approval.</p>
+          <button type="button" className="button-quiet" disabled={busy}
+            onClick={() => void refreshApplications().then(() => setNotice({kind:'success',text:'Applications refreshed from Neon.'})).catch(error=>setNotice({kind:'error',text:error instanceof Error?error.message:'Unable to refresh applications.'}))}>
+            <RefreshCw size={15}/> Refresh applications
+          </button>
           <div className="application-list">
             {applications.filter(item => item.status === 'pending').map(item => <article className="application-card" key={item.id}>
               {item.photo_url ? <img className="application-avatar" src={item.photo_url} alt={item.ign} /> : <span className="member-icon"><Users size={20} /></span>}
