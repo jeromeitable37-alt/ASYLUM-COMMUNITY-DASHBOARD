@@ -14,3 +14,17 @@
 .asy-staff-password-row button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;padding:10px 12px;border:1px solid #8c5067;background:#59263c;color:#fff;font-size:11px;font-weight:700}
 .asy-staff-password-row button:disabled{opacity:.5}
 .asy-staff-password-form small{color:#c7b3bd;line-height:1.5}
+
+/* Owner-only Management/Admin profile editor. */
+.asy-staff-profile-editor{margin-top:13px;border:1px solid #694454;border-radius:9px;background:#1b141d;padding:10px}
+.asy-staff-profile-toggle{display:inline-flex;align-items:center;gap:7px;padding:8px 10px;background:#382131;border:1px solid #94556a;border-radius:7px;color:#ffcfda;font-size:11px;font-weight:800}
+.asy-staff-profile-toggle:hover{background:#51283b}.asy-staff-profile-toggle:disabled{opacity:.5}
+.asy-staff-profile-form{margin-top:11px;display:grid;gap:8px}
+.asy-staff-profile-form label{color:#e4c1d0;font-size:10px;font-weight:800}
+.asy-staff-profile-form input{width:100%;min-width:0;padding:11px;border-radius:7px;border:1px solid #785267;background:#120d15;color:#fff;font-size:12px;outline:none}
+.asy-staff-profile-form input:focus{border-color:#f06a86;box-shadow:0 0 0 2px #e64e721f}
+.asy-staff-profile-form small{color:#bca5b1;font-size:10px;line-height:1.55}
+.asy-staff-profile-actions{display:flex;gap:8px;flex-wrap:wrap}
+.asy-staff-profile-actions button{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 12px;border-radius:7px;background:#d62b4e;border:1px solid #f25472;color:#fff;font-size:11px;font-weight:800}
+.asy-staff-profile-actions .asy-staff-profile-cancel{background:#2c1d27;border-color:#634054;color:#ead4de}
+.asy-staff-profile-actions button:disabled{opacity:.5;cursor:not-allowed}

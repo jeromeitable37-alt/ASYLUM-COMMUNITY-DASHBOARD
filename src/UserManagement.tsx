@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, RefreshCw, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
+import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, Pencil, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
 import { readApiEnvelope } from './lib/read-api';
 import { neonEmailAuth } from './lib/portal-auth';
 import './user-management.css';
@@ -9,6 +9,8 @@ export type PortalUser = {
   email: string;
   display_name: string;
   ign: string | null;
+  staff_display_name: string | null;
+  staff_ign: string | null;
   role: 'owner' | 'management' | 'admin' | 'moderator' | 'member';
   portal_status: 'active' | 'disabled' | 'removed';
   photo_url: string | null;
@@ -46,6 +48,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
   const [draftRoles, setDraftRoles] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [staffPassword, setStaffPassword] = useState<Record<string,string>>({});
+  const [editingStaff, setEditingStaff] = useState<{ userId: string; displayName: string; ign: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -102,6 +105,38 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
       setDraftRoles(current => ({ ...current, [user.user_id]: user.role }));
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not save role.' });
     } finally { setBusy(null); }
+  }
+
+  function beginStaffProfileEdit(user: PortalUser) {
+    const name = user.staff_display_name?.trim()
+      || (user.display_name === 'Community account' ? '' : user.display_name);
+    setEditingStaff({userId:user.user_id,displayName:name,ign:user.staff_ign?.trim()||user.ign||''});
+    setNotice(null);
+  }
+
+  async function saveStaffProfile(user: PortalUser) {
+    if (!editingStaff || editingStaff.userId!==user.user_id ||
+        user.role==='owner' || user.role==='member' || user.portal_status!=='active') return;
+    const displayName=editingStaff.displayName.trim();
+    const ign=editingStaff.ign.trim();
+    if (displayName.length<2 || displayName.length>80 || ign.length<2 || ign.length>40) {
+      setNotice({type:'error',message:'Staff name must be 2–80 characters and IGN must be 2–40 characters.'});
+      return;
+    }
+    setBusy(user.user_id);setNotice(null);
+    try {
+      await accountApi('staff_profile',{user_id:user.user_id,display_name:displayName,ign});
+      const latest=await accountApi<PortalUser[]>('users');
+      setAccounts(latest);
+      setDraftRoles(Object.fromEntries(latest.map(item=>[item.user_id,item.role])));
+      const stored=latest.find(item=>item.user_id===user.user_id);
+      if (stored?.staff_display_name!==displayName || stored.staff_ign!==ign)
+        throw new Error('Neon did not confirm the staff profile changes.');
+      setEditingStaff(null);
+      setNotice({type:'success',message:'Staff name and IGN saved. Existing Management/Admin role and access stay unchanged.'});
+    } catch(error) {
+      setNotice({type:'error',message:error instanceof Error?error.message:'Unable to update the staff profile.'});
+    } finally {setBusy(null);}
   }
 
   async function linkVerifiedStaff(user: PortalUser) {
@@ -236,6 +271,38 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
                 <small>Only Owner can use this control. Email verification and staff linking remain separate.</small>
               </form>}
           </div>}
+          {!isOwner && user.role !== 'member' && user.portal_status==='active' &&
+            <div className="asy-staff-profile-editor">
+              <button type="button" className="asy-staff-profile-toggle" disabled={saving}
+                aria-expanded={editingStaff?.userId===user.user_id}
+                onClick={()=>editingStaff?.userId===user.user_id ? setEditingStaff(null) : beginStaffProfileEdit(user)}>
+                <Pencil size={14}/>{editingStaff?.userId===user.user_id ? 'Close editor' : 'Edit profile'}
+              </button>
+              {editingStaff?.userId===user.user_id &&
+                <form className="asy-staff-profile-form" onSubmit={event=>{event.preventDefault();void saveStaffProfile(user);}}>
+                  <label htmlFor={`staff-name-${user.user_id}`}>Staff full name</label>
+                  <input id={`staff-name-${user.user_id}`} type="text" required minLength={2} maxLength={80}
+                    autoComplete="name" placeholder="Full name"
+                    value={editingStaff.displayName} disabled={saving}
+                    onChange={event=>setEditingStaff(current=>current && current.userId===user.user_id
+                      ? {...current,displayName:event.target.value} : current)}/>
+                  <label htmlFor={`staff-ign-${user.user_id}`}>CODM IGN</label>
+                  <input id={`staff-ign-${user.user_id}`} type="text" required minLength={2} maxLength={40}
+                    placeholder="In-game name" autoComplete="off"
+                    value={editingStaff.ign} disabled={saving}
+                    onChange={event=>setEditingStaff(current=>current && current.userId===user.user_id
+                      ? {...current,ign:event.target.value} : current)}/>
+                  <small>Owner-only. Saves to the Management profile, not to member applications. Roles are unchanged.</small>
+                  <div className="asy-staff-profile-actions">
+                    <button type="submit" disabled={saving || editingStaff.displayName.trim().length<2 || editingStaff.ign.trim().length<2}>
+                      <Save size={14}/>{saving ? 'Saving…' : 'Save profile'}
+                    </button>
+                    <button type="button" className="asy-staff-profile-cancel" disabled={saving} onClick={()=>setEditingStaff(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>}
+            </div>}
           <div className="asy-user-card-divider" />
           <label className="asy-user-role-label" htmlFor={`role-${user.user_id}`}>DASHBOARD ACCESS ROLE</label>
           <div className="asy-user-role-row"><select id={`role-${user.user_id}`} value={draftRoles[user.user_id] || user.role} onChange={e => setDraftRoles(current => ({ ...current, [user.user_id]: e.target.value }))} disabled={isOwner || saving || user.portal_status !== 'active'}>

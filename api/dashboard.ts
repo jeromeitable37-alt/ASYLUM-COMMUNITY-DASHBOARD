@@ -117,9 +117,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!owner) return res.status(403).json({ error: 'Owner access required.' });
       const rows = await sql`
         SELECT i.user_id,i.email,i.portal_status,i.created_at,
-               COALESCE(NULLIF(m.display_name,''),NULLIF(ap.display_name,''),'Community account') AS display_name,
-               COALESCE(NULLIF(m.ign,''),NULLIF(ap.ign,'')) AS ign,
-               COALESCE(m.photo_url,ap.photo_url) AS photo_url,
+               COALESCE(NULLIF(sp.display_name,''),NULLIF(m.display_name,''),NULLIF(ap.display_name,''),'Community account') AS display_name,
+               COALESCE(NULLIF(sp.ign,''),NULLIF(m.ign,''),NULLIF(ap.ign,'')) AS ign,
+               sp.display_name AS staff_display_name,sp.ign AS staff_ign,
+               COALESCE(m.photo_url,ap.photo_url,sp.photo_url) AS photo_url,
                COALESCE(a.role,'member') AS role,
                ap.status AS application_status,
                (m.id IS NOT NULL) AS has_member_profile,
@@ -132,10 +133,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         LEFT JOIN members m ON m.user_id=i.user_id
         LEFT JOIN member_applications ap ON ap.id=i.user_id
         LEFT JOIN community_admins a ON a.user_id=i.user_id
+        LEFT JOIN community_management_profiles sp ON sp.user_id=i.user_id
         ORDER BY CASE WHEN a.role='owner' THEN 0 ELSE 1 END,i.created_at DESC
         LIMIT 500
       `;
       return res.json({ data: rows });
+    }
+    if (req.method === 'POST' && action === 'staff_profile') {
+      if (!owner) return res.status(403).json({error:'Owner access required.'});
+      if (!isUuid(payload.user_id) || payload.user_id === userId)
+        return res.status(400).json({error:'Choose an existing Management/Admin account other than Owner.'});
+      if (typeof payload.display_name !== 'string' || typeof payload.ign !== 'string')
+        return res.status(422).json({error:'Staff full name and IGN are required.'});
+      const fullName = payload.display_name.trim();
+      const staffIgn = payload.ign.trim();
+      if (fullName.length < 2 || fullName.length > 80 || staffIgn.length < 2 || staffIgn.length > 40 ||
+          /[\x00-\x1f\x7f]/.test(fullName + staffIgn))
+        return res.status(422).json({error:'Use a full name of 2–80 characters and IGN of 2–40 characters.'});
+
+      // Only the active non-Owner staff profile changes, not membership records.
+      // New profiles are private; existing public-profile settings are preserved.
+      const rows = await sql`WITH eligible AS (
+          SELECT a.user_id FROM public.community_admins a
+          JOIN public.identities i ON i.user_id=a.user_id
+          WHERE a.user_id=${payload.user_id}::uuid
+            AND a.role IN ('management','admin','moderator')
+            AND i.portal_status='active'
+        ), saved AS (
+          INSERT INTO public.community_management_profiles (user_id,display_name,ign,show_public)
+          SELECT user_id,${fullName},${staffIgn},false FROM eligible
+          ON CONFLICT (user_id) DO UPDATE SET
+            display_name=EXCLUDED.display_name,
+            ign=EXCLUDED.ign,
+            updated_at=now()
+          RETURNING user_id::text AS user_id,display_name,ign
+        ), audited AS (
+          INSERT INTO public.portal_account_audit(actor_user_id,target_user_id,action,details)
+          SELECT ${userId}::uuid,saved.user_id::uuid,'staff_profile_update',
+            jsonb_build_object('fields',jsonb_build_array('display_name','ign'),
+              'source','dashboard_owner_control')
+          FROM saved RETURNING id
+        )
+        SELECT saved.user_id,saved.display_name,saved.ign FROM saved JOIN audited ON true`;
+      if (rows.length !== 1)
+        return res.status(409).json({error:'Only active Management/Admin profiles can be edited.'});
+      return res.json({data:rows[0]});
     }
     if (req.method === 'POST' && action === 'link_staff_neon') {
       if (!owner) return res.status(403).json({error:'Owner access required.'});
