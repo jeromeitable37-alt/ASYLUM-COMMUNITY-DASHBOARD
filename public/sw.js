@@ -1,6 +1,6 @@
 /* ASYLUM COMMUNITY PWA — never cache login, API responses or private dashboard records. */
-const VERSION='asy-public-icons-v1';
-const PUBLIC_ICONS=['/resources/asylum-community-logo.jpg','/resources/asylum-login-logo.svg','/icons/icon-192.svg','/icons/icon-512.svg','/icons/asylum-logo.webp'];
+const VERSION='asy-public-icons-v2';
+const PUBLIC_ICONS=['/resources/asylum-community-logo.jpg','/resources/asylum-login-logo.svg','/icons/icon-192.svg','/icons/icon-512.svg','/icons/asylum-logo.webp','/icons/icon-192.png','/icons/icon-512.png','/icons/icon-maskable-512.png','/icons/apple-touch-icon.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(PUBLIC_ICONS)).catch(()=>{}).then(()=>self.skipWaiting()));
 });
