@@ -11,6 +11,7 @@ import { readApiEnvelope } from './lib/read-api';
 import CommunityShowcase from './CommunityShowcase';
 import AboutAsylum from './AboutAsylum';
 import UserManagement from './UserManagement';
+import PhotoCropper from './PhotoCropper';
 import './auth-cyber.css';
 import './neon-recovery.css';
 import './hero-motion.css';
@@ -21,6 +22,7 @@ type Application = { id: string; display_name: string; ign: string; uid: string;
 type Notice = { kind: 'success' | 'error' | 'info'; text: string };
 type AdminRole = 'owner' | 'management' | 'moderator' | 'admin';
 type AdminAccount = { user_id: string; email: string | null; role: AdminRole; created_at: string; photo_url?: string | null };
+type CropTarget = {kind:'member';member:Member;file:File} | {kind:'self'|'management'|'registration';file:File};
 
 const managementRoles = [
   { role: 'Community Owner', description: 'Overall community leadership and final approval.' },
@@ -89,6 +91,8 @@ function App() {
   const [editingStreamerFor, setEditingStreamerFor] = useState<string | null>(null);
   const [streamerDraft, setStreamerDraft] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<CropTarget | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -215,6 +219,35 @@ function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  useEffect(() => {
+    if (!photoFile) { setPhotoPreviewUrl(null); return; }
+    const url=URL.createObjectURL(photoFile);
+    setPhotoPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  },[photoFile]);
+
+  function choosePhoto(file: File | undefined, kind: CropTarget['kind'], member?: Member) {
+    if (!file) return;
+    if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size < 100 || file.size > 5 * 1024 * 1024) {
+      setNotice({kind:'error',text:'Choose a JPG, PNG or WebP picture up to 5 MB.'});
+      return;
+    }
+    setNotice(null);
+    if (kind==='member' && member) setCropTarget({kind,member,file});
+    else if(kind==='registration'||kind==='management'||kind==='self') setCropTarget({kind,file});
+  }
+
+  async function saveCroppedPhoto(file: File) {
+    if (!cropTarget) return;
+    switch(cropTarget.kind) {
+      case 'member': await uploadDirectoryPhoto(cropTarget.member,file); break;
+      case 'management': await uploadManagementPhoto(file); break;
+      case 'self': await uploadOwnMemberPhoto(file); break;
+      case 'registration': setPhotoFile(file); break;
+    }
+    setCropTarget(null);
+  }
+
   const uploadPhoto = async (_userId: string, file: File) => {
     const publicUrl = await uploadPortalImage(file, 'application');
     await dashboard('photo', { body: { kind: 'application', photo_url: publicUrl } });
@@ -229,7 +262,7 @@ function App() {
       setApplication(current => current ? { ...current, photo_url: publicUrl } : current);
       setMembers(current => current.map(member => member.user_id === dashboardUserId ? { ...member, photo_url: publicUrl } : member));
       setNotice({ kind: 'success', text: 'Your profile picture has been updated.' });
-    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save your picture.' }); }
+    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save your picture.' }); throw error; }
     finally { setBusy(false); }
   };
 
@@ -571,7 +604,7 @@ function App() {
       await dashboard('photo', { body: { kind: 'member', member_id: member.id, photo_url: publicUrl } });
       setMembers(current => current.map(item => item.id === member.id ? { ...item, photo_url: publicUrl } : item));
       setNotice({ kind: 'success', text: 'Profile picture updated.' });
-    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to upload picture.' }); }
+    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to upload picture.' }); throw error; }
     finally { setBusy(false); }
   };
 
@@ -584,7 +617,7 @@ function App() {
       await dashboard('photo', { body: { kind: 'admin', photo_url: publicUrl } });
       setManagementPhotoUrl(publicUrl);
       setNotice({ kind: 'success', text: 'Management profile picture saved.' });
-    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save photo.' }); }
+    } catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : 'Unable to save photo.' }); throw error; }
     finally { setBusy(false); }
   };
 
@@ -780,12 +813,12 @@ function App() {
                 </div> : <button className="streamer-edit-button" type="button" disabled={busy} onClick={() => { setEditingStreamerFor(member.id); setStreamerDraft(member.streamer_mode_id || ''); }}><Pencil size={14} /> {member.streamer_mode_id ? 'Edit Streamer ID' : 'Add Streamer ID'}</button>}
               </div>}
               {isAdmin && <button className="danger-link" disabled={busy} onClick={() => void removeMember(member)}>Remove from directory</button>}
-              {isAdmin && <label className="photo-upload-control">{member.photo_url ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadDirectoryPhoto(member, file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label>}
+              {isAdmin && <label className="photo-upload-control">{member.photo_url ? 'Change profile photo' : 'Upload profile photo'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) choosePhoto(file,'member',member); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label>}
               <div className="member-foot"><span><Activity size={14} /> Official record</span><span className="card-arrow"><ArrowUpRight size={17} /></span></div>
             </article>)}
             {results.length === 0 && <div className="empty-state"><Search size={25} /><h3>{query.trim() ? 'No matching members' : 'The roster is waiting'}</h3><p>{query.trim() ? 'Try another IGN, UID, Streamer ID, or team. A missing result does not prove someone is fake.' : 'No approved members are listed yet. Apply to join and management can review your details.'}</p><button onClick={() => { setQuery(''); setAuthMode('signup'); setShowAuth(true); scrollTo('account'); }}>Apply to join</button></div>}
           </div>}
-          {activeTab === 'Roles' && <><div className="management-list">{managementRoles.map((item, index) => <article className="management-row" key={item.role}><div className="management-index">0{index + 1}</div><div className="management-icon">{index === 0 ? <Crown /> : index === 1 ? <ShieldCheck /> : <Users />}</div><div className="management-copy"><h3>{item.role}</h3><p>{item.description}</p></div><span className="management-tag">ROLE CATEGORY</span></article>)}</div>{isAdmin && <div className="management-profile-editor"><div className="management-profile-preview">{managementPhotoUrl ? <img src={managementPhotoUrl} alt="Your management profile" /> : <span><Crown size={22} /></span>}<div><strong>Your management profile</strong><small>{session?.user.email} · {currentRole}</small></div></div><label className="photo-upload-control">{managementPhotoUrl ? 'Change your management photo' : 'Upload your management photo'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadManagementPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label>{currentRole === 'owner' && adminAccounts.length > 0 && <div className="management-people-list">{adminAccounts.map(account => <div className="management-person" key={account.user_id}>{account.photo_url ? <img src={account.photo_url} alt={account.email || 'Management profile'} /> : <span><Users size={18} /></span>}<div><strong>{account.email || 'Management member'}</strong><small>{account.role}</small></div></div>)}</div>}</div>}</>}
+          {activeTab === 'Roles' && <><div className="management-list">{managementRoles.map((item, index) => <article className="management-row" key={item.role}><div className="management-index">0{index + 1}</div><div className="management-icon">{index === 0 ? <Crown /> : index === 1 ? <ShieldCheck /> : <Users />}</div><div className="management-copy"><h3>{item.role}</h3><p>{item.description}</p></div><span className="management-tag">ROLE CATEGORY</span></article>)}</div>{isAdmin && <div className="management-profile-editor"><div className="management-profile-preview">{managementPhotoUrl ? <img src={managementPhotoUrl} alt="Your management profile" /> : <span><Crown size={22} /></span>}<div><strong>Your management profile</strong><small>{session?.user.email} · {currentRole}</small></div></div><label className="photo-upload-control">{managementPhotoUrl ? 'Change your management photo' : 'Upload your management photo'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) choosePhoto(file,'management'); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label>{currentRole === 'owner' && adminAccounts.length > 0 && <div className="management-people-list">{adminAccounts.map(account => <div className="management-person" key={account.user_id}>{account.photo_url ? <img src={account.photo_url} alt={account.email || 'Management profile'} /> : <span><Users size={18} /></span>}<div><strong>{account.email || 'Management member'}</strong><small>{account.role}</small></div></div>)}</div>}</div>}</>}
           <div className="directory-disclaimer"><LockKeyhole size={16} /><p>Only approved profiles are displayed here. Management controls member approvals and official directory records.</p></div>
         </section>
 
@@ -844,7 +877,12 @@ function App() {
                     <label htmlFor="ign">IN-GAME NAME (IGN)</label><input id="ign" required minLength={2} maxLength={40} value={ign} onChange={e => setIgn(e.target.value)} placeholder="Your exact IGN" />
                     <label htmlFor="uid">PLAYER UID</label><input id="uid" required minLength={3} maxLength={40} value={uid} onChange={e => setUid(e.target.value)} placeholder="Your game UID" />
                     <label htmlFor="streamer-mode-id">STREAMER MODE ID <span className="field-hint">REQUIRED</span></label><input id="streamer-mode-id" type="text" required maxLength={100} value={streamerModeId} onChange={e => setStreamerModeId(e.target.value)} placeholder="Enter your actual Streamer Mode ID" autoComplete="off" aria-describedby="streamer-mode-help" /><small id="streamer-mode-help" className="asy-streamer-required-note">Mandatory for new registrations. Your ID is saved with your application.</small>
-                    <label htmlFor="profile-photo">PROFILE PICTURE <span className="field-hint">Optional · JPG, PNG or WebP · max 5 MB</span></label><input id="profile-photo" type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setPhotoFile(e.target.files?.[0] ?? null)} />
+                    <label htmlFor="profile-photo">PROFILE PICTURE <span className="field-hint">Optional · JPG, PNG or WebP · max 5 MB</span></label><input id="profile-photo" type="file" accept="image/png,image/jpeg,image/webp" onChange={e => {choosePhoto(e.target.files?.[0],'registration');e.currentTarget.value='';}} />
+                     {photoFile && <div className="asy-crop-selection-preview">
+                       {photoPreviewUrl && <img src={photoPreviewUrl} alt="Cropped registration photo preview"/>}
+                       <span>Photo cropped and ready.</span>
+                       <button type="button" className="button-quiet" onClick={()=>setPhotoFile(null)}>Remove</button>
+                     </div>}
                   </>}
                   <div className="auth-floating-field"><input id="account-email" type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder=" " /><label htmlFor="account-email">EMAIL ADDRESS</label></div>
                   <div className="auth-password-wrap">
@@ -1005,7 +1043,7 @@ function App() {
                     <Save size={16} /> {busy ? 'Saving…' : 'Save Streamer Mode ID'}
                   </button>
                 </form>}
-                {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : profileLoadState === 'ready' && !currentRole ? <><p>No application was found for this new Dashboard account. Existing approved members should contact management instead of registering again.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void uploadOwnMemberPhoto(file); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></> : null}
+                {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) choosePhoto(file,'self'); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : profileLoadState === 'ready' && !currentRole ? <><p>No application was found for this new Dashboard account. Existing approved members should contact management instead of registering again.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) choosePhoto(file,'self'); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></> : null}
 
                 {session && <div className="asy-password-security">
                   <button className="asy-recovery-link" type="button" onClick={() => {setSecurityOpen(v=>!v);setNotice(null);}} aria-expanded={securityOpen}><LockKeyhole size={16}/> {securityOpen ? 'Close password settings' : 'Change my password'}</button>
@@ -1055,6 +1093,12 @@ function App() {
 
         <section className="bottom-cta"><div className="cta-mark"><ShieldCheck size={24} /></div><div><div className="section-kicker">BUILT AROUND TRUST</div><h2>Official means <span>confirmed.</span></h2><p>Keep the directory accurate, clear, and managed by authorized people.</p></div><button className="button-primary" onClick={() => { setAuthMode('signup'); setShowAuth(true); scrollTo('account'); }}>Join Asylum <ArrowUpRight size={17} /></button></section>
       </main>
+      {cropTarget && <PhotoCropper key={cropTarget.file.name + cropTarget.file.lastModified}
+        file={cropTarget.file}
+        title={cropTarget.kind==='member' ? 'Adjust '+(cropTarget.member.ign||cropTarget.member.display_name)+'’s photo'
+          : cropTarget.kind==='management'?'Adjust management photo'
+          : cropTarget.kind==='registration'?'Adjust registration photo':'Adjust your profile photo'}
+        onSave={saveCroppedPhoto} onCancel={()=>setCropTarget(null)}/>}
       <footer className="footer"><a className="footer-brand" href="#home" onClick={e => { e.preventDefault(); scrollTo('home'); }}>ASYLUM <span>COMMUNITY</span></a><span>MEMBERS • RECRUITMENT • JERSEY DROP</span><span>© {new Date().getFullYear()} ASYLUM COMMUNITY · OFFICIAL DIRECTORY</span></footer>
     </div>
   );

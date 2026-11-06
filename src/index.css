@@ -1276,7 +1276,7 @@ h2 span {
 .member-card:after{content:'';position:absolute;pointer-events:none;height:3px;inset:0 0 auto;background:linear-gradient(90deg,#f44356,transparent 75%);opacity:.8}
 .member-card:hover{transform:translateY(-5px);border-color:#a44b5b;box-shadow:0 23px 50px #0005}
 .member-card .card-topline{align-items:flex-start}
-.member-card .member-avatar{width:80px;height:80px;border-radius:11px;border:1px solid #a85263;object-fit:cover;object-position:center top;box-shadow:0 8px 25px #0006}
+.member-card .member-avatar{width:80px;height:80px;border-radius:11px;border:1px solid #a85263;object-fit:cover;object-position:center center;box-shadow:0 8px 25px #0006}
 .member-card .member-icon{width:80px;height:80px;border:1px solid #62303d;border-radius:10px;background:radial-gradient(circle,#4d1c2d,#28151e);color:#f25b6d}
 .member-card .status-pill{flex:none;border-color:#4d8c617a;background:#16261cc9;color:#b3ebc4;font-size:9px;border-radius:100px;padding:7px 10px;text-transform:uppercase;letter-spacing:.06em;font-weight:800}
 .member-card .status-pill span{background:#69ce8b;box-shadow:0 0 10px #69ce8b}
