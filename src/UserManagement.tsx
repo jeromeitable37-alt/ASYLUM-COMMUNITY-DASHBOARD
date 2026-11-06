@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, Pencil, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
+import { BadgeCheck, Ban, CheckCircle2, Crown, Pencil, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
 import { readApiEnvelope } from './lib/read-api';
 import './user-management.css';
 
@@ -43,7 +43,9 @@ const roleLabels: Record<PortalUser['role'], string> = {
 export default function UserManagement({ currentUserId, onRoleUpdated }: Props) {
   const [accounts, setAccounts] = useState<PortalUser[]>([]);
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('staff');
+  const [visibleCount, setVisibleCount] = useState(12);
+  const [managingUserId, setManagingUserId] = useState<string | null>(null);
   const [draftRoles, setDraftRoles] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [editingStaff, setEditingStaff] = useState<{ userId: string; displayName: string; ign: string } | null>(null);
@@ -63,25 +65,46 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
 
   useEffect(() => { void loadAccounts(); }, [loadAccounts]);
 
-  // Shared Supabase logins without a dashboard application are NOT official members.
+  // A verified login is not automatically an approved member profile.
+  // Staff retain their existing role without a member application.
   const isLinkedProfile = (user: PortalUser) =>
     user.has_member_profile || user.has_application || user.role !== 'member';
   const filtered = useMemo(() => accounts.filter(user => {
     const q = search.trim().toLowerCase();
-    const matchesSearch = !q || [user.display_name, user.ign, user.email, user.user_id]
-      .some(value => (value || '').toLowerCase().includes(q));
-    const matchesFilter = roleFilter === 'all'
-      ? isLinkedProfile(user) && user.portal_status !== 'removed'
-      : roleFilter === 'unlinked'
-        ? !isLinkedProfile(user) && user.portal_status !== 'removed'
-        : roleFilter === 'removed'
-          ? user.portal_status === 'removed'
-          : user.role === roleFilter || user.portal_status === roleFilter;
-    return matchesSearch && matchesFilter;
+    if (q && ![user.display_name, user.ign, user.email, user.user_id, user.staff_display_name, user.staff_ign]
+      .some(value => (value || '').toLowerCase().includes(q))) return false;
+    if (roleFilter === 'removed') return user.portal_status === 'removed';
+    if (roleFilter === 'disabled') return user.portal_status === 'disabled';
+    if (user.portal_status !== 'active') return false;
+    switch(roleFilter) {
+      case 'staff': return user.role !== 'member';
+      case 'members': return user.role === 'member' && isLinkedProfile(user);
+      case 'pending': return user.role === 'member' && user.application_status === 'pending';
+      case 'no-profile': return user.role === 'member' && !isLinkedProfile(user);
+      case 'all': return true;
+      default: return user.role === roleFilter;
+    }
   }), [accounts, search, roleFilter]);
-  const linkedCount = accounts.filter(isLinkedProfile).length;
-  const unlinkedCount = accounts.filter(user => !isLinkedProfile(user) && user.portal_status !== 'removed').length;
   const staffCount = accounts.filter(user => user.role !== 'member' && user.portal_status === 'active').length;
+  const memberCount = accounts.filter(user => user.role === 'member' &&
+    user.portal_status === 'active' && isLinkedProfile(user)).length;
+  const pendingCount = accounts.filter(user => user.role === 'member' &&
+    user.portal_status === 'active' && user.application_status === 'pending').length;
+  const editingAccount = accounts.find(user => user.user_id === editingStaff?.userId);
+  const managingAccount = accounts.find(user => user.user_id === managingUserId);
+  const visibleUsers = filtered.slice(0,visibleCount);
+
+  useEffect(() => {
+    if (!editingStaff && !managingUserId) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busy) {
+        setEditingStaff(null);
+        setManagingUserId(null);
+      }
+    };
+    window.addEventListener('keydown',onEscape);
+    return () => window.removeEventListener('keydown',onEscape);
+  }, [editingStaff,managingUserId,busy]);
 
   async function saveRole(user: PortalUser) {
     const nextRole = draftRoles[user.user_id];
@@ -98,6 +121,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
         throw new Error('Neon has not confirmed the requested role change. No success was assumed.');
       }
       onRoleUpdated?.();
+      setManagingUserId(null);
       setNotice({ type: 'success', message: `Role saved and verified for ${user.ign || user.display_name}.` });
     } catch (error) {
       setDraftRoles(current => ({ ...current, [user.user_id]: user.role }));
@@ -149,6 +173,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
       setDraftRoles(Object.fromEntries(latest.map(item=>[item.user_id,item.role])));
       if (!latest.find(item=>item.user_id===user.user_id)?.neon_linked)
         throw new Error('Neon did not confirm the staff login link.');
+      setManagingUserId(null);
       setNotice({type:'success',message:'Verified staff login linked. Existing role preserved.'});
     } catch(error) {
       setNotice({type:'error',message:error instanceof Error?error.message:'Unable to link this login.'});
@@ -173,6 +198,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
       if (!persisted || persisted.portal_status !== nextStatus) {
         throw new Error('Neon did not confirm the requested account status. Refresh and check the record.');
       }
+      setManagingUserId(null);
       setNotice({ type: 'success', message: `Account marked ${nextStatus} and verified in Neon.` });
     } catch (error) {
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not change account status.' });
@@ -181,97 +207,186 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
 
   return <section className="asy-user-management" id="user-management" aria-labelledby="asy-user-management-title">
     <div className="asy-user-management-heading">
-      <div><div className="asy-user-kicker"><UserRoundCog size={16} /> OWNER ACCESS / ACCOUNT CONTROL</div>
+      <div><div className="asy-user-kicker"><UserRoundCog size={15}/> OWNER ACCESS / ACCOUNT CONTROL</div>
         <h3 id="asy-user-management-title">User <span>Management.</span></h3>
-        <p>Manage official member and staff profiles. Logins without an ASYLUM membership application are listed separately as unlinked accounts. Changes are recorded in the audit history.</p>
+        <p>Staff accounts and community registrations, organized in one place.</p>
       </div>
-      <button className="asy-user-refresh" type="button" onClick={() => void loadAccounts()} disabled={loading}><RefreshCw size={15} /> Refresh</button>
+      <button className="asy-user-refresh" type="button" onClick={() => void loadAccounts()} disabled={loading}>
+        <RefreshCw size={15}/> Refresh
+      </button>
     </div>
+
     <div className="asy-user-summary">
-      <div><Users size={17} /><strong>{linkedCount.toString().padStart(2, '0')}</strong><span>MEMBER / STAFF</span></div>
-      <div><CheckCircle2 size={17} /><strong>{unlinkedCount.toString().padStart(2, '0')}</strong><span>UNLINKED LOGINS</span></div>
-      <div><ShieldCheck size={17} /><strong>{staffCount.toString().padStart(2, '0')}</strong><span>ACTIVE STAFF</span></div>
+      <div><ShieldCheck size={16}/><strong>{staffCount}</strong><span>ACTIVE STAFF</span></div>
+      <div><Users size={16}/><strong>{memberCount}</strong><span>MEMBER RECORDS</span></div>
+      <div><BadgeCheck size={16}/><strong>{pendingCount}</strong><span>PENDING REVIEW</span></div>
     </div>
+
     <div className="asy-user-toolbar">
-      <label className="asy-user-search"><Search size={18} /> <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by IGN, name, or email" aria-label="Search registered users" /></label>
-      <label className="asy-user-filter"><span>FILTER</span><select value={roleFilter} onChange={e=>setRoleFilter(e.target.value)}>
-        <option value="all">Members & staff</option><option value="unlinked">Unlinked logins</option><option value="owner">Owner</option><option value="management">Management Admin</option><option value="admin">Admin</option><option value="moderator">Moderator</option><option value="member">Members</option><option value="disabled">Disabled</option><option value="removed">Removed</option>
+      <label className="asy-user-search"><Search size={17}/>
+        <input value={search} onChange={event=>{setSearch(event.target.value);setVisibleCount(12);}}
+          placeholder="Search name, IGN, or email" aria-label="Search registered users"/>
+      </label>
+      <label className="asy-user-filter"><span>VIEW</span><select value={roleFilter} onChange={event=>{setRoleFilter(event.target.value);setVisibleCount(12);}}>
+        <option value="staff">Management &amp; Admin</option>
+        <option value="members">Member records</option>
+        <option value="pending">Pending applications</option>
+        <option value="no-profile">Needs member profile</option>
+        <option value="all">All active accounts</option>
+        <option value="owner">Owner</option>
+        <option value="management">Management Admin only</option>
+        <option value="admin">Admin only</option>
+        <option value="moderator">Moderator only</option>
+        <option value="disabled">Disabled</option>
+        <option value="removed">Archived</option>
       </select></label>
     </div>
-    {notice && <div className={`asy-user-notice ${notice.type}`} role="status">{notice.type === 'error' ? <XCircle size={17} /> : <CheckCircle2 size={17} />}<span>{notice.message}</span><button type="button" onClick={()=>setNotice(null)} aria-label="Close notification">×</button></div>}
-    {loading && <div className="asy-user-empty">Loading registered ASYLUM accounts…</div>}
-    {!loading && <div className="asy-user-cards">
-      {filtered.map(user => {
-        const isOwner = user.role === 'owner' || user.user_id === currentUserId;
-        const saving = busy === user.user_id;
-        return <article className={`asy-user-card ${user.portal_status !== 'active' ? 'inactive' : ''}`} key={user.user_id}>
-          <div className="asy-user-card-top">
-            <div className="asy-user-identity">
-              {user.photo_url ? <img className="asy-user-avatar" src={user.photo_url} alt="" loading="lazy" /> : <span className="asy-user-avatar fallback">{(user.ign || user.display_name || 'AS').slice(0,2).toUpperCase()}</span>}
-              <div className="asy-user-identification"><h4>{isLinkedProfile(user) ? (user.ign || user.display_name) : 'Unlinked login'}</h4><small>{isLinkedProfile(user) ? (user.ign ? user.display_name : 'No IGN submitted yet') : 'No dashboard member profile or application'}</small></div>
-            </div>
-            <span className={`asy-user-state ${user.portal_status}`}>{user.portal_status === 'active' ? 'ACTIVE' : user.portal_status.toUpperCase()}</span>
-          </div>
-          <div className="asy-user-email" title={user.email}>{user.email}</div>
-          <div className="asy-user-tags">{!isLinkedProfile(user) && <span><XCircle size={12}/> UNLINKED LOGIN</span>}<span><BadgeCheck size={12} /> {roleLabels[user.role]}</span>{isOwner && <span><Crown size={12} /> PROTECTED</span>}{user.application_status && <span>{user.application_status.toUpperCase()}</span>}</div>
-          {user.role!=='member' && <div className="asy-user-neon-status">
-            <small>{user.neon_linked ? 'NEON LOGIN: LINKED'
-              : user.neon_verified ? 'NEON LOGIN: VERIFIED — OWNER LINK NEEDED'
-              : user.has_neon_login ? 'NEON LOGIN: VERIFY EMAIL FIRST'
-              : 'NEON LOGIN: ACTIVATION NEEDED'}</small>
-            {!isOwner && user.neon_verified && !user.neon_linked && user.portal_status==='active' &&
-              <button type="button" disabled={saving} onClick={()=>void linkVerifiedStaff(user)}>
-                <ShieldCheck size={14}/> Link verified staff login
-              </button>}
-
-          </div>}
-          {!isOwner && user.role !== 'member' && user.portal_status==='active' &&
-            <div className="asy-staff-profile-editor">
-              <button type="button" className="asy-staff-profile-toggle" disabled={saving}
-                aria-expanded={editingStaff?.userId===user.user_id}
-                onClick={()=>editingStaff?.userId===user.user_id ? setEditingStaff(null) : beginStaffProfileEdit(user)}>
-                <Pencil size={14}/>{editingStaff?.userId===user.user_id ? 'Close editor' : 'Edit profile'}
-              </button>
-              {editingStaff?.userId===user.user_id &&
-                <form className="asy-staff-profile-form" onSubmit={event=>{event.preventDefault();void saveStaffProfile(user);}}>
-                  <label htmlFor={`staff-name-${user.user_id}`}>Staff full name</label>
-                  <input id={`staff-name-${user.user_id}`} type="text" required minLength={2} maxLength={80}
-                    autoComplete="name" placeholder="Full name"
-                    value={editingStaff.displayName} disabled={saving}
-                    onChange={event=>setEditingStaff(current=>current && current.userId===user.user_id
-                      ? {...current,displayName:event.target.value} : current)}/>
-                  <label htmlFor={`staff-ign-${user.user_id}`}>CODM IGN</label>
-                  <input id={`staff-ign-${user.user_id}`} type="text" required minLength={2} maxLength={40}
-                    placeholder="In-game name" autoComplete="off"
-                    value={editingStaff.ign} disabled={saving}
-                    onChange={event=>setEditingStaff(current=>current && current.userId===user.user_id
-                      ? {...current,ign:event.target.value} : current)}/>
-                  <small>Owner-only. Saves to the Management profile, not to member applications. Roles are unchanged.</small>
-                  <div className="asy-staff-profile-actions">
-                    <button type="submit" disabled={saving || editingStaff.displayName.trim().length<2 || editingStaff.ign.trim().length<2}>
-                      <Save size={14}/>{saving ? 'Saving…' : 'Save profile'}
-                    </button>
-                    <button type="button" className="asy-staff-profile-cancel" disabled={saving} onClick={()=>setEditingStaff(null)}>
-                      Cancel
-                    </button>
-                  </div>
-                </form>}
-            </div>}
-          <div className="asy-user-card-divider" />
-          <label className="asy-user-role-label" htmlFor={`role-${user.user_id}`}>DASHBOARD ACCESS ROLE</label>
-          <div className="asy-user-role-row"><select id={`role-${user.user_id}`} value={draftRoles[user.user_id] || user.role} onChange={e => setDraftRoles(current => ({ ...current, [user.user_id]: e.target.value }))} disabled={isOwner || saving || user.portal_status !== 'active'}>
-            <option value="member">Member</option><option value="moderator">Moderator</option><option value="admin">Admin</option><option value="management">Management Admin</option>{isOwner && <option value="owner">Owner</option>}
-          </select><button type="button" disabled={isOwner || saving || user.portal_status !== 'active' || (draftRoles[user.user_id] || user.role) === user.role} onClick={()=>void saveRole(user)}><ShieldCheck size={15} /> Save</button></div>
-          <div className="asy-user-action-row">
-            {isOwner ? <span className="asy-user-owner-note"><LockKeyhole size={13} /> Owner account is protected</span> : <>
-              {user.portal_status === 'active' ? <button type="button" className="asy-user-disable" disabled={saving} onClick={()=>void changeStatus(user,'disabled')}><Ban size={14} /> Disable</button> : <button type="button" className="asy-user-restore" disabled={saving} onClick={()=>void changeStatus(user,'active')}><CheckCircle2 size={14} /> Restore</button>}
-              {user.portal_status !== 'removed' && <button type="button" className="asy-user-remove" disabled={saving} onClick={()=>void changeStatus(user,'removed')}><Trash2 size={14} /> Archive</button>}
-            </>}
-          </div>
-        </article>;
-      })}
-      {filtered.length === 0 && <div className="asy-user-empty">No accounts match this filter. Use “Unlinked logins” to review sign-in records without member profiles, or “Removed” to restore archived entries.</div>}
+    <p className="asy-user-guide">New Official Dashboard sign-ups appear under Member records after submitting their profile. Accounts still finishing registration appear under Needs member profile. Recruitment applications are managed separately.</p>
+    {notice && <div className={'asy-user-notice '+notice.type} role="status">
+      {notice.type==='error'?<XCircle size={16}/>:<CheckCircle2 size={16}/>}
+      <span>{notice.message}</span>
+      <button type="button" onClick={()=>setNotice(null)} aria-label="Close notification">×</button>
     </div>}
-    <div className="asy-user-footnote"><LockKeyhole size={15} /><span><strong>Portal-only management:</strong> Disable/Archive blocks access to this dashboard and hides its public member profile. Neon Auth accounts are preserved. Recruitment and other websites use separate authentication and remain unaffected. Check “Unlinked logins” before archiving records without member applications.</span></div>
+
+    {loading ? <div className="asy-user-empty">Loading accounts…</div> : <>
+      <div className="asy-user-result-count" role="status">
+        Showing {visibleUsers.length} of {filtered.length} account{filtered.length===1?'':'s'}
+      </div>
+      <div className="asy-user-cards">
+        {visibleUsers.map(user=>{
+          const isOwner=user.role==='owner'||user.user_id===currentUserId;
+          const saving=busy===user.user_id;
+          const hasProfile=isLinkedProfile(user);
+          const heading=hasProfile?(user.ign||user.display_name):'Account pending profile';
+          const description=hasProfile
+            ? user.ign && user.display_name!=='Community account' ? user.display_name
+              : user.role!=='member' ? 'Profile details not yet added' : 'Profile on file'
+            : 'Registration not completed';
+          return <article className={'asy-user-card'+(user.portal_status!=='active'?' inactive':'')} key={user.user_id}>
+            <div className="asy-user-card-top">
+              <div className="asy-user-identity">
+                {user.photo_url ? <img className="asy-user-avatar" src={user.photo_url} alt="" loading="lazy"/> :
+                  <span className="asy-user-avatar fallback">{(user.ign||user.display_name||'AS').slice(0,2).toUpperCase()}</span>}
+                <div className="asy-user-identification">
+                  <h4 title={heading}>{heading}</h4>
+                  <small title={description}>{description}</small>
+                </div>
+              </div>
+              <span className={'asy-user-state '+user.portal_status}>{user.portal_status==='active'?'ACTIVE':user.portal_status==='removed'?'ARCHIVED':user.portal_status.toUpperCase()}</span>
+            </div>
+            <div className="asy-user-email" title={user.email}>{user.email}</div>
+            <div className="asy-user-tags">
+              <span><BadgeCheck size={11}/>{roleLabels[user.role]}</span>
+              {user.application_status==='pending' && <span className="asy-user-tag-pending">PENDING</span>}
+              {user.application_status==='rejected' && <span className="asy-user-tag-rejected">REJECTED</span>}
+            </div>
+            <div className="asy-user-card-footer">
+              {isOwner ? <span className="asy-user-owner-note"><Crown size={14}/> Owner protected</span> : <>
+                {user.role!=='member' && user.portal_status==='active' &&
+                  <button type="button" className="asy-user-edit-compact" disabled={saving} onClick={()=>beginStaffProfileEdit(user)}>
+                    <Pencil size={13}/> Edit
+                  </button>}
+                <button type="button" className="asy-user-manage-compact" disabled={saving} onClick={()=>{setManagingUserId(user.user_id);setNotice(null);}}>
+                  <UserRoundCog size={14}/> Manage
+                </button>
+              </>}
+            </div>
+          </article>;
+        })}
+      </div>
+      {filtered.length===0 && <div className="asy-user-empty">No accounts found in this view. Try a different filter or search.</div>}
+      {filtered.length>visibleCount && <button type="button" className="asy-user-more"
+        onClick={()=>setVisibleCount(count=>count+12)}>
+        Show 12 more ({filtered.length-visibleCount} remaining)
+      </button>}
+    </>}
+
+    {editingStaff && editingAccount && <div className="asy-user-modal-backdrop"
+      onMouseDown={event=>{if(event.target===event.currentTarget && !busy)setEditingStaff(null);}}>
+      <section className="asy-user-modal" role="dialog" aria-modal="true" aria-labelledby="asy-edit-staff-title">
+        <div className="asy-user-modal-heading">
+          <div><span className="asy-user-modal-eyebrow">OWNER-ONLY</span>
+            <h4 id="asy-edit-staff-title">Edit staff profile</h4>
+            <p>{editingAccount.email}</p>
+          </div>
+          <button type="button" className="asy-user-modal-close" onClick={()=>setEditingStaff(null)}
+            aria-label="Close editor" disabled={Boolean(busy)}>×</button>
+        </div>
+        {notice?.type==="error" && <p className="asy-user-modal-error" role="alert">{notice.message}</p>}
+        <form className="asy-staff-profile-form" onSubmit={event=>{event.preventDefault();void saveStaffProfile(editingAccount);}}>
+          <label htmlFor="staff-profile-fullname">Staff full name</label>
+          <input id="staff-profile-fullname" autoFocus required minLength={2} maxLength={80}
+            autoComplete="name" placeholder="Full name" disabled={Boolean(busy)}
+            value={editingStaff.displayName}
+            onChange={event=>setEditingStaff(current=>current?{...current,displayName:event.target.value}:current)}/>
+          <label htmlFor="staff-profile-ign">CODM IGN</label>
+          <input id="staff-profile-ign" required minLength={2} maxLength={40}
+            autoComplete="off" placeholder="In-game name" disabled={Boolean(busy)}
+            value={editingStaff.ign}
+            onChange={event=>setEditingStaff(current=>current?{...current,ign:event.target.value}:current)}/>
+          <small>Only the display name and IGN change. Role, email, password, and member applications stay untouched.</small>
+          <div className="asy-staff-profile-actions">
+            <button type="submit" disabled={Boolean(busy)||editingStaff.displayName.trim().length<2||editingStaff.ign.trim().length<2}>
+              <Save size={14}/>{busy?'Saving…':'Save profile'}
+            </button>
+            <button type="button" className="asy-staff-profile-cancel" onClick={()=>setEditingStaff(null)} disabled={Boolean(busy)}>Cancel</button>
+          </div>
+        </form>
+      </section>
+    </div>}
+
+    {managingAccount && managingAccount.user_id!==currentUserId && managingAccount.role!=='owner' &&
+      <div className="asy-user-modal-backdrop"
+        onMouseDown={event=>{if(event.target===event.currentTarget && !busy)setManagingUserId(null);}}>
+        <section className="asy-user-modal" role="dialog" aria-modal="true" aria-labelledby="asy-manage-account-title">
+          <div className="asy-user-modal-heading">
+            <div><span className="asy-user-modal-eyebrow">OWNER-ONLY</span>
+              <h4 id="asy-manage-account-title">Manage account</h4>
+              <p>{managingAccount.email}</p>
+            </div>
+            <button type="button" className="asy-user-modal-close" aria-label="Close account manager"
+              disabled={Boolean(busy)} onClick={()=>setManagingUserId(null)}>×</button>
+          </div>
+          <div className="asy-user-manage-content">
+            {notice?.type==="error" && <p className="asy-user-modal-error" role="alert">{notice.message}</p>}
+            <label className="asy-user-role-label" htmlFor="asy-manage-role">DASHBOARD ACCESS ROLE</label>
+            <div className="asy-user-role-row">
+              <select id="asy-manage-role" value={draftRoles[managingAccount.user_id]||managingAccount.role}
+                onChange={event=>setDraftRoles(current=>({...current,[managingAccount.user_id]:event.target.value}))}
+                disabled={Boolean(busy)||managingAccount.portal_status!=='active'}>
+                <option value="member">Member</option><option value="moderator">Moderator</option>
+                <option value="admin">Admin</option><option value="management">Management Admin</option>
+              </select>
+              <button type="button" onClick={()=>void saveRole(managingAccount)}
+                disabled={Boolean(busy)||managingAccount.portal_status!=='active'||
+                  (draftRoles[managingAccount.user_id]||managingAccount.role)===managingAccount.role}>
+                <ShieldCheck size={14}/> Save
+              </button>
+            </div>
+            {managingAccount.role!=='member' && managingAccount.portal_status==='active' &&
+              managingAccount.neon_verified && !managingAccount.neon_linked &&
+              <button type="button" className="asy-user-link-login" disabled={Boolean(busy)}
+                onClick={()=>void linkVerifiedStaff(managingAccount)}>
+                <ShieldCheck size={15}/> Link verified staff account
+              </button>}
+            <div className="asy-user-action-row">
+              {managingAccount.portal_status==='active'
+                ? <button type="button" disabled={Boolean(busy)} onClick={()=>void changeStatus(managingAccount,'disabled')}>
+                    <Ban size={14}/> Disable access
+                  </button>
+                : <button type="button" className="asy-user-restore" disabled={Boolean(busy)}
+                    onClick={()=>void changeStatus(managingAccount,'active')}>
+                    <CheckCircle2 size={14}/> Restore access
+                  </button>}
+              {managingAccount.portal_status!=='removed' &&
+                <button type="button" className="asy-user-remove" disabled={Boolean(busy)}
+                  onClick={()=>void changeStatus(managingAccount,'removed')}>
+                  <Trash2 size={14}/> Archive
+                </button>}
+            </div>
+            <p className="asy-user-manage-help">Changing access here affects only the Official Dashboard. Recruitment and Jersey sites stay separate.</p>
+          </div>
+        </section>
+      </div>}
   </section>;
 }
