@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, Ban, CheckCircle2, Crown, LockKeyhole, Pencil, RefreshCw, Save, Search, ShieldCheck, Trash2, UserRoundCog, Users, XCircle } from 'lucide-react';
 import { readApiEnvelope } from './lib/read-api';
-import { neonEmailAuth } from './lib/portal-auth';
 import './user-management.css';
 
 export type PortalUser = {
@@ -47,7 +46,6 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
   const [roleFilter, setRoleFilter] = useState('all');
   const [draftRoles, setDraftRoles] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [staffPassword, setStaffPassword] = useState<Record<string,string>>({});
   const [editingStaff, setEditingStaff] = useState<{ userId: string; displayName: string; ign: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -157,36 +155,6 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
     } finally {setBusy(null);}
   }
 
-  async function submitStaffPassword(user: PortalUser) {
-    if (user.role === 'owner' || user.role === 'member' ||
-        user.portal_status !== 'active' || !user.neon_auth_user_id) return;
-    const candidate = staffPassword[user.user_id] || '';
-    if (candidate.length < 8 || candidate.length > 128) {
-      setNotice({type:'error',message:'Enter a Neon password between 8 and 128 characters.'});
-      return;
-    }
-    if (!window.confirm('Replace the Neon Auth password for ' + (user.ign || user.display_name) +
-      '? This does not verify their email or link their existing staff role.')) return;
-    setBusy(user.user_id); setNotice(null);
-    try {
-      // Neon Admin plugin checks the signed-in Owner's Neon Auth admin role.
-      // Only the authenticated Owner sees this form. Never send passwords to
-      // Dashboard API, logs, analytics or application database.
-      const { error } = await neonEmailAuth.admin.setUserPassword({
-        userId: user.neon_auth_user_id,
-        newPassword: candidate,
-      });
-      if (error) throw new Error(error.message || 'Neon did not accept the password change.');
-      setStaffPassword(current => {
-        const next = {...current}; delete next[user.user_id]; return next;
-      });
-      setNotice({type:'success',message:'Neon password updated for '+(user.ign || user.display_name)+
-        '. Email verification and Owner linking remain required before first sign-in.'});
-    } catch(error) {
-      setNotice({type:'error',message:error instanceof Error?error.message:'Unable to set password using Neon Auth.'});
-    } finally { setBusy(null); }
-  }
-
   async function changeStatus(user: PortalUser, nextStatus: PortalUser['portal_status']) {
     const isRemove = nextStatus === 'removed';
     const question = nextStatus === 'active'
@@ -255,21 +223,7 @@ export default function UserManagement({ currentUserId, onRoleUpdated }: Props) 
               <button type="button" disabled={saving} onClick={()=>void linkVerifiedStaff(user)}>
                 <ShieldCheck size={14}/> Link verified staff login
               </button>}
-            {!isOwner && user.neon_auth_user_id && user.portal_status==='active' &&
-              <form className="asy-staff-password-form" onSubmit={event=>{event.preventDefault();void submitStaffPassword(user);}}>
-                <label htmlFor={`staff-password-${user.user_id}`}>Owner: Set staff Neon password</label>
-                <div className="asy-staff-password-row">
-                  <input id={`staff-password-${user.user_id}`} type="password" minLength={8} maxLength={128}
-                    placeholder="Enter password" autoComplete="new-password"
-                    value={staffPassword[user.user_id]||''}
-                    onChange={event=>setStaffPassword(current=>({...current,[user.user_id]:event.target.value}))}
-                    disabled={saving} required/>
-                  <button type="submit" disabled={saving || (staffPassword[user.user_id]||'').length < 8}>
-                    <LockKeyhole size={14}/> Set password
-                  </button>
-                </div>
-                <small>Only Owner can use this control. Email verification and staff linking remain separate.</small>
-              </form>}
+
           </div>}
           {!isOwner && user.role !== 'member' && user.portal_status==='active' &&
             <div className="asy-staff-profile-editor">
