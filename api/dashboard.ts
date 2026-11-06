@@ -314,7 +314,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           review_note='Not approved by management',updated_at=now()
           WHERE id=${payload.id}::uuid AND status='pending' RETURNING *`;
       }
-      if (!updated.length) return res.status(409).json({ error: 'Application was already reviewed or not found.' });
+      if (!updated.length) {
+        // A manager can have an out-of-date pending card after another manager
+        // approves it. A repeated identical decision is harmless and should
+        // refresh the UI instead of misleading the user with an error.
+        const current = await sql`SELECT ap.*,
+          EXISTS(SELECT 1 FROM public.members m WHERE m.user_id=ap.id) AS published
+          FROM public.member_applications ap WHERE ap.id=${payload.id}::uuid LIMIT 1`;
+        if (current.length === 1 && current[0].status === decision &&
+            (decision === 'rejected' || current[0].published === true)) {
+          return res.json({ data: current[0], already_reviewed: true });
+        }
+        return res.status(409).json({ error: 'Application was already reviewed or not found. Refresh the applications list.' });
+      }
       return res.json({ data: updated[0] });
     }
     if (req.method === 'POST' && action === 'remove_member') {
