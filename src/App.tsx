@@ -24,6 +24,7 @@ type Notice = { kind: 'success' | 'error' | 'info'; text: string };
 type AdminRole = 'owner' | 'management' | 'moderator' | 'admin';
 type AdminAccount = { user_id: string; email: string | null; role: AdminRole; created_at: string; photo_url?: string | null };
 type CropTarget = {kind:'member';member:Member;file:File} | {kind:'self'|'management'|'registration';file:File};
+type EditableMyProfile = {display_name:string;ign:string;uid:string;streamer_mode_id:string;has_application:boolean;is_staff:boolean};
 
 const managementRoles = [
   { role: 'Community Owner', description: 'Overall community leadership and final approval.' },
@@ -72,6 +73,10 @@ function App() {
   const [recoveryConfirm, setRecoveryConfirm] = useState('');
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [myProfileOpen, setMyProfileOpen] = useState(false);
+  const [myProfileDraft, setMyProfileDraft] = useState<EditableMyProfile | null>(null);
+  const [myProfileBusy, setMyProfileBusy] = useState(false);
+  const [myProfileError, setMyProfileError] = useState('');
   const [securityBusy, setSecurityBusy] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [securityNewPassword, setSecurityNewPassword] = useState('');
@@ -554,6 +559,51 @@ function App() {
     } catch(error) {
       setNotice({kind:'error',text:error instanceof Error ? error.message : 'Could not complete your profile.'});
     } finally{setBusy(false);}
+  };
+
+  const openMyProfileEditor = async () => {
+    if (myProfileOpen) {
+      setMyProfileOpen(false);
+      setMyProfileError('');
+      return;
+    }
+    setMyProfileBusy(true);
+    setMyProfileError('');
+    try {
+      const own = await dashboard<EditableMyProfile>('my_profile');
+      setMyProfileDraft(own);
+      setMyProfileOpen(true);
+    } catch(error) {
+      setMyProfileError(error instanceof Error ? error.message : 'Unable to load your profile.');
+    } finally {setMyProfileBusy(false);}
+  };
+
+  const saveMyProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!myProfileDraft || myProfileBusy) return;
+    const fullName=myProfileDraft.display_name.trim();
+    const newIgn=myProfileDraft.ign.trim();
+    const newUid=myProfileDraft.uid.trim();
+    const streamer=myProfileDraft.streamer_mode_id.trim();
+    if (fullName.length<2 || fullName.length>60 || newIgn.length<2 || newIgn.length>40 ||
+        (newUid.length>0 && (newUid.length<3 || newUid.length>40)) ||
+        (myProfileDraft.has_application && newUid.length<3) || streamer.length>100) {
+      setMyProfileError('Check the name, IGN, UID and Streamer Mode ID before saving.');
+      return;
+    }
+    setMyProfileBusy(true);
+    setMyProfileError('');
+    try {
+      await dashboard('update_my_profile',{body:{
+        display_name:fullName,ign:newIgn,uid:newUid,streamer_mode_id:streamer
+      }});
+      setMyProfileOpen(false);
+      setMyProfileDraft(null);
+      setNotice({kind:'success',text:'Your profile details were saved to the Official Dashboard.'});
+      setProfileRefreshVersion(v=>v+1);
+    } catch(error) {
+      setMyProfileError(error instanceof Error?error.message:'Unable to save your profile.');
+    } finally {setMyProfileBusy(false);}
   };
 
   const saveOwnStreamerId = async (event: FormEvent<HTMLFormElement>) => {
@@ -1069,6 +1119,49 @@ function App() {
                 </form>}
                 {application ? <div className={'application-status ' + application.status}><strong>{application.status.toUpperCase()}</strong><span>{application.status === 'pending' ? 'Management has not reviewed your application yet.' : application.status === 'approved' ? 'Your membership is approved.' : 'Your application was not approved. Contact management if you need clarification.'}</span><div className="application-details"><b>{application.ign}</b><span>UID: {application.uid}</span>{application.streamer_mode_id && <span>Streamer Mode ID: {application.streamer_mode_id}</span>}{application.photo_url && <img src={application.photo_url} alt="Your profile" />}<label className="photo-upload-control">{application.photo_url ? 'Change your profile picture' : 'Add your profile picture'}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) choosePhoto(file,'self'); e.currentTarget.value = ''; }} /><small>Upload your own photo · JPG, PNG or WebP · max 5 MB</small></label></div></div> : profileLoadState === 'ready' && !currentRole ? <><p>No application was found for this new Dashboard account. Existing approved members should contact management instead of registering again.</p><label className="photo-upload-control">Add your profile picture<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) choosePhoto(file,'self'); e.currentTarget.value = ''; }} /><small>JPG, PNG or WebP · max 5 MB</small></label></> : null}
 
+                {profileLoadState === 'ready' && (application || currentRole) && <div className="asy-my-profile-editor">
+                  <button type="button" className="asy-my-profile-toggle"
+                    disabled={myProfileBusy} aria-expanded={myProfileOpen}
+                    onClick={() => void openMyProfileEditor()}>
+                    <Pencil size={16}/> {myProfileBusy ? 'Loading…' : myProfileOpen ? 'Close profile editor' : 'Edit My Profile'}
+                  </button>
+                  {myProfileError && <p role="alert" className="asy-my-profile-error">{myProfileError}</p>}
+                  {myProfileOpen && myProfileDraft && <form className="asy-my-profile-form" onSubmit={saveMyProfile}>
+                    <h4>My account details</h4>
+                    <p>Edit your own details. Email, login password, role and approval remain unchanged.</p>
+                    <label htmlFor="my-profile-name">FULL NAME</label>
+                    <input id="my-profile-name" type="text" required minLength={2} maxLength={60}
+                      autoComplete="name" disabled={myProfileBusy} value={myProfileDraft.display_name}
+                      onChange={e=>setMyProfileDraft(d=>d?{...d,display_name:e.target.value}:d)}/>
+                    <label htmlFor="my-profile-ign">CODM IGN</label>
+                    <input id="my-profile-ign" type="text" required minLength={2} maxLength={40}
+                      disabled={myProfileBusy} value={myProfileDraft.ign}
+                      onChange={e=>setMyProfileDraft(d=>d?{...d,ign:e.target.value}:d)}/>
+                    <label htmlFor="my-profile-uid">CODM UID {myProfileDraft.has_application ? '(REQUIRED)' : '(OPTIONAL)'}</label>
+                    <input id="my-profile-uid" type="text" inputMode="numeric"
+                      required={myProfileDraft.has_application} minLength={3} maxLength={40}
+                      disabled={myProfileBusy} value={myProfileDraft.uid}
+                      placeholder="Your CODM UID"
+                      onChange={e=>setMyProfileDraft(d=>d?{...d,uid:e.target.value}:d)}/>
+                    <label htmlFor="my-profile-smode">STREAMER MODE ID</label>
+                    <input id="my-profile-smode" type="text" maxLength={100}
+                      disabled={myProfileBusy} value={myProfileDraft.streamer_mode_id}
+                      placeholder="Your Streamer Mode ID"
+                      onChange={e=>setMyProfileDraft(d=>d?{...d,streamer_mode_id:e.target.value}:d)}/>
+                    <div className="asy-my-profile-actions">
+                      <button type="submit" className="button-primary" disabled={myProfileBusy}>
+                        <Save size={15}/> {myProfileBusy ? 'Saving…' : 'Save changes'}
+                      </button>
+                      <button type="button" className="button-quiet" disabled={myProfileBusy}
+                        onClick={()=>{setMyProfileOpen(false);setMyProfileError('');}}>Cancel</button>
+                    </div>
+                    <label className="photo-upload-control">Change profile photo
+                      <input type="file" accept="image/png,image/jpeg,image/webp" disabled={myProfileBusy||busy}
+                        onChange={e=>{choosePhoto(e.target.files?.[0],myProfileDraft.has_application?'self':'management');e.currentTarget.value='';}}/>
+                      <small>Crop and zoom before upload · JPG, PNG or WebP · max 5 MB</small>
+                    </label>
+                  </form>}
+                </div>}
                 {session && <div className="asy-password-security">
                   <button className="asy-recovery-link" type="button" onClick={() => {setSecurityOpen(v=>!v);setNotice(null);}} aria-expanded={securityOpen}><LockKeyhole size={16}/> {securityOpen ? 'Close password settings' : 'Change my password'}</button>
                   {securityOpen && <form className="asy-recovery-form" onSubmit={updateMyPassword}>

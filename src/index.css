@@ -1305,3 +1305,20 @@ h2 span {
   .menu-toggle{height:38px;width:38px}
   .nav-links{top:100%;left:0;right:0}
 }
+
+/* Self-service profile editor for signed-in management and community members. */
+.asy-my-profile-editor{width:100%;max-width:600px;border:1px solid #67404d;border-radius:12px;background:linear-gradient(140deg,#25151d,#110c11);padding:15px;display:grid;gap:11px}
+.asy-my-profile-toggle{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;background:#a32847;color:#fff;border:1px solid #ec5571;border-radius:8px;padding:12px 15px;font-weight:800;font-size:13px;cursor:pointer}
+.asy-my-profile-toggle:hover{background:#c82e52}
+.asy-my-profile-toggle:disabled{opacity:.58;cursor:not-allowed}
+.asy-my-profile-form{display:grid;gap:9px;width:100%}
+.asy-my-profile-form h4{margin:3px 0 0;font:800 17px 'Space Grotesk',sans-serif;color:#fff}
+.asy-my-profile-form>p{margin:0 0 4px;color:#c9afba;font-size:11px;line-height:1.65}
+.asy-my-profile-form>label:not(.photo-upload-control){font-weight:800;font-size:10px;letter-spacing:.08em;color:#ffadbf}
+.asy-my-profile-form>input{box-sizing:border-box;width:100%;min-width:0;background:#120e13;color:#fff;border:1px solid #755265;border-radius:8px;min-height:44px;padding:11px 12px;font-size:13px}
+.asy-my-profile-form>input:focus{outline:2px solid #d94869;outline-offset:1px}
+.asy-my-profile-form>input:disabled{opacity:.65}
+.asy-my-profile-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:5px}
+.asy-my-profile-actions button{display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 15px;font-size:12px;border-radius:8px}
+.asy-my-profile-error{color:#ffe1e8;background:#3c1c28;border:1px solid #ad4961;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5}
+@media(max-width:520px){.asy-my-profile-editor{padding:12px}.asy-my-profile-actions button{flex:1}}

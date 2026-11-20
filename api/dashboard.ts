@@ -94,6 +94,87 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!rows.length) return res.status(404).json({ error: 'Unable to save the Streamer Mode ID.' });
       return res.json({ data: rows[0] });
     }
+    if (req.method === 'GET' && action === 'my_profile') {
+      const rows = await sql`SELECT
+          COALESCE(NULLIF(sp.display_name,''),NULLIF(ap.display_name,''),NULLIF(m.display_name,''),'') AS display_name,
+          COALESCE(NULLIF(sp.ign,''),NULLIF(ap.ign,''),NULLIF(m.ign,''),'') AS ign,
+          COALESCE(NULLIF(sp.uid,''),NULLIF(ap.uid,''),NULLIF(m.uid,''),'') AS uid,
+          COALESCE(NULLIF(sp.streamer_mode_id,''),NULLIF(ap.streamer_mode_id,''),NULLIF(m.streamer_mode_id,''),'') AS streamer_mode_id,
+          (ap.id IS NOT NULL) AS has_application, (ca.user_id IS NOT NULL) AS is_staff
+        FROM identities i
+        LEFT JOIN community_admins ca ON ca.user_id=i.user_id
+        LEFT JOIN community_management_profiles sp ON sp.user_id=i.user_id
+        LEFT JOIN member_applications ap ON ap.id=i.user_id
+        LEFT JOIN members m ON m.user_id=i.user_id
+        WHERE i.user_id=${userId}::uuid AND i.portal_status='active' LIMIT 1`;
+      if (!rows.length || (!rows[0].has_application && !rows[0].is_staff))
+        return res.status(404).json({error:'Complete your existing Dashboard registration before editing your profile.'});
+      return res.json({data:rows[0]});
+    }
+    if (req.method === 'POST' && action === 'update_my_profile') {
+      if (['display_name','ign','uid','streamer_mode_id'].some(field=>typeof payload[field]!=='string'))
+        return res.status(422).json({error:'Provide your name, IGN, UID and Streamer Mode ID as text.'});
+      const fullName=payload.display_name.trim(),newIgn=payload.ign.trim();
+      const newUid=payload.uid.trim(),streamer=payload.streamer_mode_id.trim();
+      if (fullName.length<2 || fullName.length>60 || newIgn.length<2 || newIgn.length>40 ||
+          (newUid.length>0 && (newUid.length<3 || newUid.length>40)) || streamer.length>100 ||
+          /[\x00-\x1f\x7f]/.test(fullName+newIgn+newUid+streamer))
+        return res.status(422).json({error:'Name 2–60 characters, IGN 2–40, UID 3–40 if provided, Streamer Mode ID maximum 100.'});
+      const eligible=await sql`SELECT (a.user_id IS NOT NULL) AS is_staff,
+          (ap.id IS NOT NULL) AS has_application
+        FROM identities i
+        LEFT JOIN community_admins a ON a.user_id=i.user_id
+        LEFT JOIN member_applications ap ON ap.id=i.user_id
+        WHERE i.user_id=${userId}::uuid AND i.portal_status='active' LIMIT 1`;
+      if (!eligible.length || (!eligible[0].is_staff && !eligible[0].has_application))
+        return res.status(403).json({error:'You need an existing Dashboard profile to edit account details.'});
+      if (eligible[0].has_application && newUid.length<3)
+        return res.status(422).json({error:'A valid CODM UID is required for your existing member record.'});
+
+      // Single atomic statement. Only the signed-in user can be updated.
+      // No changes to email, password, roles, approval, public visibility or teams.
+      const changes=await sql`WITH identity AS (
+          SELECT user_id FROM identities
+          WHERE user_id=${userId}::uuid AND portal_status='active'
+        ), staff_saved AS (
+          INSERT INTO community_management_profiles
+            (user_id,display_name,ign,uid,streamer_mode_id,show_public)
+          SELECT a.user_id,${fullName},${newIgn},${newUid},${streamer},false
+          FROM community_admins a JOIN identity i ON i.user_id=a.user_id
+          ON CONFLICT (user_id) DO UPDATE SET
+            display_name=EXCLUDED.display_name, ign=EXCLUDED.ign,
+            uid=EXCLUDED.uid,streamer_mode_id=EXCLUDED.streamer_mode_id,
+            updated_at=now()
+          RETURNING user_id
+        ), application_saved AS (
+          UPDATE member_applications ap SET
+            display_name=${fullName},ign=${newIgn},uid=${newUid},
+            streamer_mode_id=NULLIF(${streamer},''),updated_at=now()
+          WHERE ap.id IN (SELECT user_id FROM identity) RETURNING id
+        ), member_saved AS (
+          UPDATE members m SET
+            display_name=${fullName},ign=${newIgn},uid=${newUid},
+            streamer_mode_id=NULLIF(${streamer},''),updated_at=now()
+          WHERE m.user_id IN (SELECT user_id FROM identity) RETURNING user_id
+        ), audit AS (
+          INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details)
+          SELECT ${userId}::uuid,${userId}::uuid,'staff_profile_update',
+            jsonb_build_object('source','my_account_self_service',
+              'fields',jsonb_build_array('display_name','ign','uid','streamer_mode_id'))
+          FROM identity
+          WHERE EXISTS(SELECT 1 FROM staff_saved)
+             OR EXISTS(SELECT 1 FROM application_saved)
+             OR EXISTS(SELECT 1 FROM member_saved)
+          RETURNING id
+        )
+        SELECT (SELECT count(*)::int FROM staff_saved) AS staff_count,
+               (SELECT count(*)::int FROM application_saved) AS app_count,
+               (SELECT count(*)::int FROM member_saved) AS member_count,
+               (SELECT count(*)::int FROM audit) AS audit_count`;
+      if (changes.length!==1 || changes[0].audit_count!==1)
+        return res.status(409).json({error:'Profile update could not be confirmed. Refresh and try again.'});
+      return res.json({data:{display_name:fullName,ign:newIgn,uid:newUid,streamer_mode_id:streamer}});
+    }
     if (req.method === 'GET' && action === 'profile') {
       const [app, admin] = await Promise.all([
         sql`SELECT * FROM member_applications WHERE id = ${userId}::uuid LIMIT 1`,
