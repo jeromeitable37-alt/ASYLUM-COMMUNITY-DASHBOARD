@@ -100,6 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           COALESCE(NULLIF(sp.ign,''),NULLIF(ap.ign,''),NULLIF(m.ign,''),'') AS ign,
           COALESCE(NULLIF(sp.uid,''),NULLIF(ap.uid,''),NULLIF(m.uid,''),'') AS uid,
           COALESCE(NULLIF(sp.streamer_mode_id,''),NULLIF(ap.streamer_mode_id,''),NULLIF(m.streamer_mode_id,''),'') AS streamer_mode_id,
+          COALESCE(NULLIF(sp.clan_name,''),NULLIF(ap.clan_name,''),NULLIF(m.clan_name,''),'') AS clan_name,
           (ap.id IS NOT NULL) AS has_application, (ca.user_id IS NOT NULL) AS is_staff
         FROM identities i
         LEFT JOIN community_admins ca ON ca.user_id=i.user_id
@@ -112,13 +113,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({data:rows[0]});
     }
     if (req.method === 'POST' && action === 'update_my_profile') {
-      if (['display_name','ign','uid','streamer_mode_id'].some(field=>typeof payload[field]!=='string'))
+      if (['display_name','ign','uid','streamer_mode_id','clan_name'].some(field=>typeof payload[field]!=='string'))
         return res.status(422).json({error:'Provide your name, IGN, UID and Streamer Mode ID as text.'});
       const fullName=payload.display_name.trim(),newIgn=payload.ign.trim();
-      const newUid=payload.uid.trim(),streamer=payload.streamer_mode_id.trim();
+      const newUid=payload.uid.trim(),streamer=payload.streamer_mode_id.trim(),clanName=payload.clan_name.trim();
       if (fullName.length<2 || fullName.length>60 || newIgn.length<2 || newIgn.length>40 ||
-          (newUid.length>0 && (newUid.length<3 || newUid.length>40)) || streamer.length>100 ||
-          /[\x00-\x1f\x7f]/.test(fullName+newIgn+newUid+streamer))
+          (newUid.length>0 && (newUid.length<3 || newUid.length>40)) || (streamer.length>100 || clanName.length>60) ||
+          /[\x00-\x1f\x7f]/.test(fullName+newIgn+newUid+streamer+clanName))
         return res.status(422).json({error:'Name 2–60 characters, IGN 2–40, UID 3–40 if provided, Streamer Mode ID maximum 100.'});
       const eligible=await sql`SELECT (a.user_id IS NOT NULL) AS is_staff,
           (ap.id IS NOT NULL) AS has_application
@@ -138,29 +139,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           WHERE user_id=${userId}::uuid AND portal_status='active'
         ), staff_saved AS (
           INSERT INTO community_management_profiles
-            (user_id,display_name,ign,uid,streamer_mode_id,show_public)
-          SELECT a.user_id,${fullName},${newIgn},${newUid},${streamer},false
+            (user_id,display_name,ign,uid,streamer_mode_id,clan_name,show_public)
+          SELECT a.user_id,${fullName},${newIgn},${newUid},${streamer},${clanName},false
           FROM community_admins a JOIN identity i ON i.user_id=a.user_id
           ON CONFLICT (user_id) DO UPDATE SET
             display_name=EXCLUDED.display_name, ign=EXCLUDED.ign,
             uid=EXCLUDED.uid,streamer_mode_id=EXCLUDED.streamer_mode_id,
-            updated_at=now()
+            clan_name=EXCLUDED.clan_name,updated_at=now()
           RETURNING user_id
         ), application_saved AS (
           UPDATE member_applications ap SET
             display_name=${fullName},ign=${newIgn},uid=${newUid},
-            streamer_mode_id=NULLIF(${streamer},''),updated_at=now()
+            streamer_mode_id=NULLIF(${streamer},''),clan_name=${clanName},updated_at=now()
           WHERE ap.id IN (SELECT user_id FROM identity) RETURNING id
         ), member_saved AS (
           UPDATE members m SET
             display_name=${fullName},ign=${newIgn},uid=${newUid},
-            streamer_mode_id=NULLIF(${streamer},''),updated_at=now()
+            streamer_mode_id=NULLIF(${streamer},''),clan_name=${clanName},updated_at=now()
           WHERE m.user_id IN (SELECT user_id FROM identity) RETURNING user_id
         ), audit AS (
           INSERT INTO portal_account_audit(actor_user_id,target_user_id,action,details)
           SELECT ${userId}::uuid,${userId}::uuid,'staff_profile_update',
             jsonb_build_object('source','my_account_self_service',
-              'fields',jsonb_build_array('display_name','ign','uid','streamer_mode_id'))
+              'fields',jsonb_build_array('display_name','ign','uid','streamer_mode_id','clan_name'))
           FROM identity
           WHERE EXISTS(SELECT 1 FROM staff_saved)
              OR EXISTS(SELECT 1 FROM application_saved)
@@ -173,7 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                (SELECT count(*)::int FROM audit) AS audit_count`;
       if (changes.length!==1 || changes[0].audit_count!==1)
         return res.status(409).json({error:'Profile update could not be confirmed. Refresh and try again.'});
-      return res.json({data:{display_name:fullName,ign:newIgn,uid:newUid,streamer_mode_id:streamer}});
+      return res.json({data:{display_name:fullName,ign:newIgn,uid:newUid,streamer_mode_id:streamer,clan_name:clanName}});
     }
     if (req.method === 'GET' && action === 'profile') {
       const [app, admin] = await Promise.all([
