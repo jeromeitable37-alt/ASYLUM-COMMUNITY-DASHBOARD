@@ -24,7 +24,7 @@ type Notice = { kind: 'success' | 'error' | 'info'; text: string };
 type AdminRole = 'owner' | 'management' | 'moderator' | 'admin';
 type AdminAccount = { user_id: string; email: string | null; role: AdminRole; created_at: string; photo_url?: string | null };
 type CropTarget = {kind:'member';member:Member;file:File} | {kind:'self'|'management'|'registration';file:File};
-type EditableMyProfile = {display_name:string;ign:string;uid:string;streamer_mode_id:string;has_application:boolean;is_staff:boolean};
+type EditableMyProfile = {display_name:string;ign:string;uid:string;streamer_mode_id:string;clan_name:string;has_application:boolean;is_staff:boolean};
 
 const managementRoles = [
   { role: 'Community Owner', description: 'Overall community leadership and final approval.' },
@@ -585,9 +585,10 @@ function App() {
     const newIgn=myProfileDraft.ign.trim();
     const newUid=myProfileDraft.uid.trim();
     const streamer=myProfileDraft.streamer_mode_id.trim();
+    const clanName=myProfileDraft.clan_name.trim();
     if (fullName.length<2 || fullName.length>60 || newIgn.length<2 || newIgn.length>40 ||
         (newUid.length>0 && (newUid.length<3 || newUid.length>40)) ||
-        (myProfileDraft.has_application && newUid.length<3) || streamer.length>100) {
+        (myProfileDraft.has_application && newUid.length<3) || streamer.length>100 || clanName.length>60) {
       setMyProfileError('Check the name, IGN, UID and Streamer Mode ID before saving.');
       return;
     }
@@ -595,7 +596,7 @@ function App() {
     setMyProfileError('');
     try {
       await dashboard('update_my_profile',{body:{
-        display_name:fullName,ign:newIgn,uid:newUid,streamer_mode_id:streamer
+        display_name:fullName,ign:newIgn,uid:newUid,streamer_mode_id:streamer,clan_name:clanName
       }});
       setMyProfileOpen(false);
       setMyProfileDraft(null);
@@ -1148,6 +1149,11 @@ function App() {
                       disabled={myProfileBusy} value={myProfileDraft.streamer_mode_id}
                       placeholder="Your Streamer Mode ID"
                       onChange={e=>setMyProfileDraft(d=>d?{...d,streamer_mode_id:e.target.value}:d)}/>
+                    <label htmlFor="my-profile-clan">CLAN NAME (OPTIONAL)</label>
+                    <input id="my-profile-clan" type="text" maxLength={60}
+                      disabled={myProfileBusy} value={myProfileDraft.clan_name}
+                      placeholder="Enter your clan name"
+                      onChange={e=>setMyProfileDraft(d=>d?{...d,clan_name:e.target.value}:d)}/>
                     <div className="asy-my-profile-actions">
                       <button type="submit" className="button-primary" disabled={myProfileBusy}>
                         <Save size={15}/> {myProfileBusy ? 'Saving…' : 'Save changes'}
