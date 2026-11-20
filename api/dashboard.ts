@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const payload = req.body && typeof req.body === 'object' ? req.body : {};
   try {
     if (req.method === 'GET' && action === 'directory') {
-      const rows = await sql`SELECT m.id,m.display_name,m.ign,m.uid,m.streamer_mode_id,m.team,m.role,m.photo_url FROM members m LEFT JOIN identities i ON i.user_id=m.user_id WHERE COALESCE(i.portal_status,'active')='active' ORDER BY m.created_at DESC LIMIT 3000`;
+      const rows = await sql`SELECT m.id,m.display_name,m.ign,m.uid,m.streamer_mode_id,m.team,CASE WHEN a.role='owner' THEN 'Community Owner' WHEN a.role='management' THEN 'Management' WHEN a.role='admin' THEN 'Admin' WHEN a.role='moderator' THEN 'Moderator' ELSE COALESCE(NULLIF(m.role,''),'Member') END AS role,m.photo_url FROM members m LEFT JOIN identities i ON i.user_id=m.user_id LEFT JOIN community_admins a ON a.user_id=m.user_id WHERE COALESCE(i.portal_status,'active')='active' ORDER BY m.created_at DESC LIMIT 3000`;
       return res.json({ data: rows });
     }
     const user = await requirePortalIdentity(req,sql);
@@ -187,7 +187,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!manager) return res.status(403).json({ error: 'Management access required.' });
       const [applications, members] = await Promise.all([
         sql`SELECT * FROM member_applications ORDER BY created_at DESC LIMIT 2000`,
-        sql`SELECT m.id,m.user_id,m.display_name,m.ign,m.uid,m.streamer_mode_id,m.team,m.role,m.photo_url FROM members m LEFT JOIN identities i ON i.user_id=m.user_id WHERE COALESCE(i.portal_status,'active')='active' ORDER BY m.created_at DESC LIMIT 3000`,
+        sql`SELECT m.id,m.user_id,m.display_name,m.ign,m.uid,m.streamer_mode_id,m.team,CASE WHEN a.role='owner' THEN 'Community Owner' WHEN a.role='management' THEN 'Management' WHEN a.role='admin' THEN 'Admin' WHEN a.role='moderator' THEN 'Moderator' ELSE COALESCE(NULLIF(m.role,''),'Member') END AS role,m.photo_url FROM members m LEFT JOIN identities i ON i.user_id=m.user_id LEFT JOIN community_admins a ON a.user_id=m.user_id WHERE COALESCE(i.portal_status,'active')='active' ORDER BY m.created_at DESC LIMIT 3000`,
       ]);
       return res.json({ data: { applications, members } });
     }
